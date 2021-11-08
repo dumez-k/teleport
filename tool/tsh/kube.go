@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -106,9 +107,10 @@ func newKubeExecCommand(parent *kingpin.CmdClause) *kubeExecCommand {
 	return c
 }
 
-// TODO(joel): impl run
 func (c *kubeExecCommand) run(cf *CLIConf) error {
-	return nil
+	cmdStrings := kubeExecCommandAssembler(c)
+	cmd := exec.Command(cmdStrings[0], cmdStrings[1:]...)
+	return trace.Wrap(cmd.Run())
 }
 
 type kubeSessionsCommand struct {
