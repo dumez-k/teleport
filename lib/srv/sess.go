@@ -1102,7 +1102,6 @@ func (s *session) removePartyMember(party *party) {
 	defer s.mu.Unlock()
 
 	delete(s.parties, party.id)
-	s.checkAccess <- struct{}{}
 }
 
 // removeParty removes the party from the in-memory map that holds all party
@@ -1114,7 +1113,7 @@ func (s *session) removeParty(p *party) error {
 	s.removePartyMember(p)
 
 	s.writer.deleteWriter(string(p.id))
-
+	s.checkAccess <- struct{}{}
 	return nil
 }
 
