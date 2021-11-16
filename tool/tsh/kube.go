@@ -98,7 +98,6 @@ type kubeExecCommand struct {
 	command   []string
 }
 
-// TODO(joel): impl params
 func newKubeExecCommand(parent *kingpin.CmdClause) *kubeExecCommand {
 	c := &kubeExecCommand{
 		CmdClause: parent.Command("exec", "Execute a command in a kubernetes pod"),
@@ -118,7 +117,6 @@ func (c *kubeExecCommand) run(cf *CLIConf) error {
 	cmdStrings := kubeExecCommandAssembler(c)
 	cmd := exec.Command(cmdStrings[0], cmdStrings[1:]...)
 	return trace.Wrap(cmd.Run())
-	return nil
 }
 
 type kubeSessionsCommand struct {
