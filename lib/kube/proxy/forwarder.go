@@ -743,6 +743,7 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 	}()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	sess, err := f.newClusterSession(*ctx)
 	if err != nil {
 		// This error goes to kubernetes client and is not visible in the logs
@@ -1039,6 +1040,17 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 
 =======
 >>>>>>> 493e88ca8 (rip out existing impl of the exec handler and track sessions in forwarder)
+=======
+	session := newSession(*ctx, f, req, p)
+	client := &kubeProxyClientStreams{}
+	party := newParty(*ctx, client)
+
+	err = session.join(party)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+>>>>>>> 42e3d5b0f (wire exec into current session)
 	return nil, nil
 }
 
