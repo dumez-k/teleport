@@ -23,7 +23,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io"
 	mathrand "math/rand"
 	"net"
 	"net/http"
@@ -48,7 +47,6 @@ import (
 	"github.com/gravitational/teleport/lib/labels"
 	"github.com/gravitational/teleport/lib/reversetunnel"
 	"github.com/gravitational/teleport/lib/services"
-	tsession "github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/srv"
 	"github.com/gravitational/teleport/lib/sshca"
 	"github.com/gravitational/teleport/lib/utils"
@@ -67,7 +65,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/transport/spdy"
-	utilexec "k8s.io/client-go/util/exec"
 )
 
 // KubeServiceType specifies a Teleport service type which can forward Kubernetes requests
@@ -238,6 +235,7 @@ func NewForwarder(cfg ForwarderConfig) (*Forwarder, error) {
 		activeRequests:    make(map[string]context.Context),
 		ctx:               closeCtx,
 		close:             close,
+		sessions:          make(map[uuid.UUID]*session),
 	}
 
 	fwd.router.POST("/api/:ver/namespaces/:podNamespace/pods/:podName/exec", fwd.withAuth(fwd.exec))
@@ -280,6 +278,8 @@ type Forwarder struct {
 	// creds contain kubernetes credentials for multiple clusters.
 	// map key is cluster name.
 	creds map[string]*kubeCreds
+	// sessions tracks in-flight sessions
+	sessions map[uuid.UUID]*session
 }
 
 // Close signals close to all outstanding or background operations
@@ -742,6 +742,7 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		}
 	}()
 
+<<<<<<< HEAD
 	sess, err := f.newClusterSession(*ctx)
 	if err != nil {
 		// This error goes to kubernetes client and is not visible in the logs
@@ -1036,6 +1037,8 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		return nil, trace.Wrap(err)
 	}
 
+=======
+>>>>>>> 493e88ca8 (rip out existing impl of the exec handler and track sessions in forwarder)
 	return nil, nil
 }
 
