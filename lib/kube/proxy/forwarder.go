@@ -744,6 +744,7 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 	sess, err := f.newClusterSession(*ctx)
 	if err != nil {
 		// This error goes to kubernetes client and is not visible in the logs
@@ -753,6 +754,8 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 	}
 	sessionStart := f.cfg.Clock.Now().UTC()
 
+=======
+>>>>>>> 5ea918098 (hook up streams from kube exec endpoint)
 	q := req.URL.Query()
 	request := remoteCommandRequest{
 		podNamespace:       p.ByName("podNamespace"),
@@ -768,6 +771,7 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		context:            req.Context(),
 		pingPeriod:         f.cfg.ConnPingPeriod,
 	}
+<<<<<<< HEAD
 	eventPodMeta := request.eventPodMeta(request.context, sess.creds)
 
 	var recorder events.SessionRecorder
@@ -1041,8 +1045,12 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 =======
 >>>>>>> 493e88ca8 (rip out existing impl of the exec handler and track sessions in forwarder)
 =======
+=======
+
+	proxy, err := createRemoteCommandProxy(request)
+>>>>>>> 5ea918098 (hook up streams from kube exec endpoint)
 	session := newSession(*ctx, f, req, p)
-	client := &kubeProxyClientStreams{}
+	client := newKubeProxyClientStreams(proxy)
 	party := newParty(*ctx, client)
 
 	err = session.join(party)
