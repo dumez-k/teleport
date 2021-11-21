@@ -1048,8 +1048,20 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 =======
 
 	proxy, err := createRemoteCommandProxy(request)
+<<<<<<< HEAD
 >>>>>>> 5ea918098 (hook up streams from kube exec endpoint)
 	session := newSession(*ctx, f, req, p)
+=======
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	session, err := newSession(*ctx, f, req, p)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+>>>>>>> e0cfb9a5c (get initiator roles)
 	client := newKubeProxyClientStreams(proxy)
 	party := newParty(*ctx, client)
 
