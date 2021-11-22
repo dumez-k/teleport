@@ -71,6 +71,8 @@ type kubeJoinCommand struct {
 	session string
 }
 
+// TODO(joel): filter responses from list sessions
+
 func newKubeJoinCommand(parent *kingpin.CmdClause) *kubeJoinCommand {
 	c := &kubeJoinCommand{
 		CmdClause: parent.Command("join", "Join an active Kubernetes session."),
@@ -92,7 +94,7 @@ func (c *kubeJoinCommand) getSessionMeta(ctx context.Context, tc *client.Telepor
 		}
 	}
 
-	return nil, nil
+	return nil, trace.NotFound("session %q not found", c.session)
 }
 
 // TODO(joel): set kube cluster field when creating session resource in service
