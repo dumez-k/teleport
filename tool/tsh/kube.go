@@ -77,7 +77,6 @@ func newKubeJoinCommand(parent *kingpin.CmdClause) *kubeJoinCommand {
 	}
 
 	c.Flag("session", "The ID of the target session.").Required().StringVar(&c.session)
-
 	return c
 }
 
