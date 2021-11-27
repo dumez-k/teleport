@@ -1100,15 +1100,20 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		return nil, trace.Wrap(err)
 	}
 
-	session, err := newSession(*ctx, f, req, p)
+	client := newKubeProxyClientStreams(proxy)
+	party := newParty(*ctx, client)
+	session, err := newSession(*ctx, f, req, p, party)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
+<<<<<<< HEAD
 >>>>>>> e0cfb9a5c (get initiator roles)
 	client := newKubeProxyClientStreams(proxy)
 	party := newParty(*ctx, client)
 
+=======
+>>>>>>> d3b0315cc (track sessions)
 	err = session.join(party)
 	if err != nil {
 		return nil, trace.Wrap(err)
