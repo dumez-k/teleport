@@ -254,7 +254,7 @@ func hasLocalUserRole(checker services.AccessChecker) bool {
 }
 
 func (a *ServerWithRoles) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.Session, error) {
-	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) {
+	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) && !a.hasBuiltinRole(string(types.RoleProxy)) {
 		return nil, trace.AccessDenied("this request can be only executed by a proxy")
 	}
 
@@ -262,10 +262,6 @@ func (a *ServerWithRoles) CreateSessionTracker(ctx context.Context, req *proto.C
 }
 
 func (a *ServerWithRoles) GetActiveSessionTrackers(ctx context.Context) ([]types.Session, error) {
-	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) {
-		return nil, trace.AccessDenied("this request can be only executed by a proxy")
-	}
-
 	sessions, err := a.authServer.GetActiveSessionTrackers(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -305,7 +301,7 @@ func (a *ServerWithRoles) GetActiveSessionTrackers(ctx context.Context) ([]types
 }
 
 func (a *ServerWithRoles) RemoveSessionTracker(ctx context.Context, sessionID string) error {
-	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) {
+	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) && !a.hasBuiltinRole(string(types.RoleProxy)) {
 		return trace.AccessDenied("this request can be only executed by a proxy")
 	}
 
@@ -313,7 +309,7 @@ func (a *ServerWithRoles) RemoveSessionTracker(ctx context.Context, sessionID st
 }
 
 func (a *ServerWithRoles) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
-	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) {
+	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) && !a.hasBuiltinRole(string(types.RoleProxy)) {
 		return trace.AccessDenied("this request can be only executed by a proxy")
 	}
 
