@@ -1110,12 +1110,16 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 	}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> e0cfb9a5c (get initiator roles)
 	client := newKubeProxyClientStreams(proxy)
 	party := newParty(*ctx, client)
 
 =======
 >>>>>>> d3b0315cc (track sessions)
+=======
+	f.sessions[session.id] = session
+>>>>>>> 10660dc65 (various fixes)
 	err = session.join(party)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -1125,7 +1129,11 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 >>>>>>> 42e3d5b0f (wire exec into current session)
 =======
 	<-party.closeC
+<<<<<<< HEAD
 >>>>>>> b9323c697 (block endpoints on party close)
+=======
+	delete(f.sessions, session.id)
+>>>>>>> 10660dc65 (various fixes)
 	return nil, nil
 }
 
