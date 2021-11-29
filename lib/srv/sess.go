@@ -1336,7 +1336,7 @@ func (s *session) addParty(p *party) error {
 
 	// Write last chunk (so the newly joined parties won't stare at a blank
 	// screen).
-	if _, err := p.Write(s.writer.getRecentWrites()); err != nil {
+	if _, err := p.Write(s.writer.GetRecentWrites()); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -1462,7 +1462,7 @@ func (m *MultiWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (m *MultiWriter) getRecentWrites() []byte {
+func (m *MultiWriter) GetRecentWrites() []byte {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	data := make([]byte, 0, 1024)
