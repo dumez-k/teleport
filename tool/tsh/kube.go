@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -34,6 +35,7 @@ import (
 	"k8s.io/client-go/pkg/apis/clientauthentication"
 	clientauthv1beta1 "k8s.io/client-go/pkg/apis/clientauthentication/v1beta1"
 
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/profile"
 	"github.com/gravitational/teleport/api/types"
@@ -43,6 +45,18 @@ import (
 	"github.com/gravitational/teleport/lib/client"
 	"github.com/gravitational/teleport/lib/kube/kubeconfig"
 	kubeutils "github.com/gravitational/teleport/lib/kube/utils"
+<<<<<<< HEAD
+=======
+	"github.com/gravitational/teleport/lib/srv/alpnproxy"
+	"github.com/gravitational/teleport/lib/utils"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/pkg/apis/clientauthentication"
+	clientauthv1beta1 "k8s.io/client-go/pkg/apis/clientauthentication/v1beta1"
+>>>>>>> fcdc68a2e (mfa solver impl)
 )
 
 type kubeCommands struct {
@@ -164,7 +178,17 @@ func (c *kubeJoinCommand) run(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 
-	session, err := client.NewKubeSession(cf.Context, tc, meta, k, tc.KubeProxyAddr, kubeStatus.tlsServerName)
+	session, err := client.NewKubeSession(cf.Context, tc, meta, k, tc.KubeProxyAddr, kubeStatus.tlsServerName, func(term io.Writer, challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+		utils.WriteAll(term.Write, []byte("\r\nTeleport > Please tap your MFA key within 15 seconds\r\n"))
+		response, err := client.PromptU2FChallenges(context.TODO(), tc.Config.WebProxyAddr, challenge.U2F)
+		if err != nil {
+			utils.WriteAll(term.Write, []byte(fmt.Sprintf("\r\nTeleport > Failed to confirm presence: %v\r\n", err)))
+			return nil, trace.Wrap(err)
+		}
+
+		utils.WriteAll(term.Write, []byte("\r\nTeleport > Received MFA presence confirmation\r\n"))
+		return response, nil
+	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
