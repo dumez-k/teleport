@@ -84,6 +84,7 @@ func newKubeCommand(app *kingpin.Application) kubeCommands {
 type kubeJoinCommand struct {
 	*kingpin.CmdClause
 	session string
+	mode    string
 }
 
 func newKubeJoinCommand(parent *kingpin.CmdClause) *kubeJoinCommand {
@@ -91,6 +92,7 @@ func newKubeJoinCommand(parent *kingpin.CmdClause) *kubeJoinCommand {
 		CmdClause: parent.Command("join", "Join an active Kubernetes session."),
 	}
 
+	c.Flag("mode", "Mode of joining the session, valid modes are observer and moderator").Short('m').Default("moderator").StringVar(&c.mode)
 	c.Arg("session", "The ID of the target session.").Required().StringVar(&c.session)
 	return c
 }
@@ -178,7 +180,7 @@ func (c *kubeJoinCommand) run(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 
-	session, err := client.NewKubeSession(cf.Context, tc, meta, k, tc.KubeProxyAddr, kubeStatus.tlsServerName, func(term io.Writer, challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+	session, err := client.NewKubeSession(cf.Context, tc, meta, k, tc.KubeProxyAddr, kubeStatus.tlsServerName, types.SessionParticipantMode(c.mode), func(term io.Writer, challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
 		utils.WriteAll(term.Write, []byte("\r\nTeleport > Please tap your MFA key within 15 seconds\r\n"))
 		challenge.TOTP = nil
 
