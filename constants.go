@@ -618,6 +618,8 @@ const (
 	VersionRequest = "x-teleport-version"
 
 	ForceTerminateRequest = "x-teleport-force-terminate"
+
+	SSHJoinModeEnv = "x-teleport-join-mode"
 )
 
 const (
