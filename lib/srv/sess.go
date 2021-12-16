@@ -82,11 +82,10 @@ type SessionRegistry struct {
 	// srv refers to the upon which this session registry is created.
 	srv Server
 
-	// TODO(joel): initialize this
 	auth auth.ClientI
 }
 
-func NewSessionRegistry(srv Server) (*SessionRegistry, error) {
+func NewSessionRegistry(srv Server, auth auth.ClientI) (*SessionRegistry, error) {
 	err := utils.RegisterPrometheusCollectors(serverSessions)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -192,7 +191,6 @@ func (s *SessionRegistry) OpenSession(ch ssh.Channel, req *ssh.Request, ctx *Ser
 		ctx.Infof("Joining existing session %v.", session.id)
 
 		// Update the in-memory data structure that a party member has joined.
-		// TODO(joel): mode switching here
 		_, err := session.join(ch, req, ctx, types.SessionPeerMode)
 		if err != nil {
 			return trace.Wrap(err)
@@ -1668,6 +1666,11 @@ func (p *party) Close() (err error) {
 }
 
 func (s *session) trackerGet() (types.Session, error) {
+	if s.registry.auth == nil {
+		return nil, trace.BadParameter("cannot fetch session without auth service")
+	}
+
+	// get the session from the registry
 	sess, err := s.registry.auth.GetSessionTracker(s.serverCtx, s.id.String())
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -1677,6 +1680,10 @@ func (s *session) trackerGet() (types.Session, error) {
 }
 
 func (s *session) trackerCreate(teleportUser string) error {
+	if s.registry.auth == nil {
+		return nil
+	}
+
 	s.log.Debug("Creating tracker")
 	initator := &types.Participant{
 		ID:         teleportUser,
@@ -1702,6 +1709,10 @@ func (s *session) trackerCreate(teleportUser string) error {
 }
 
 func (s *session) trackerAddParticipant(participant *party) error {
+	if s.registry.auth == nil {
+		return nil
+	}
+
 	s.log.Debugf("Tracking participant: %v", participant.user)
 	req := &proto.UpdateSessionRequest{
 		SessionID: s.id.String(),
@@ -1721,6 +1732,10 @@ func (s *session) trackerAddParticipant(participant *party) error {
 }
 
 func (s *session) trackerRemoveParticipant(participantID string) error {
+	if s.registry.auth == nil {
+		return nil
+	}
+
 	s.log.Debugf("Not tracking participant: %v", participantID)
 	req := &proto.UpdateSessionRequest{
 		SessionID: s.id.String(),
@@ -1736,6 +1751,10 @@ func (s *session) trackerRemoveParticipant(participantID string) error {
 }
 
 func (s *session) trackerUpdateState(state types.SessionState) error {
+	if s.registry.auth == nil {
+		return nil
+	}
+
 	req := &proto.UpdateSessionRequest{
 		SessionID: s.id.String(),
 		Update: &proto.UpdateSessionRequest_UpdateState{
