@@ -83,8 +83,9 @@ func newKubeCommand(app *kingpin.Application) kubeCommands {
 
 type kubeJoinCommand struct {
 	*kingpin.CmdClause
-	session string
-	mode    string
+	session  string
+	mode     string
+	siteName string
 }
 
 func newKubeJoinCommand(parent *kingpin.CmdClause) *kubeJoinCommand {
@@ -93,12 +94,13 @@ func newKubeJoinCommand(parent *kingpin.CmdClause) *kubeJoinCommand {
 	}
 
 	c.Flag("mode", "Mode of joining the session, valid modes are observer and moderator").Short('m').Default("moderator").StringVar(&c.mode)
+	c.Flag("cluster", clusterHelp).Short('c').StringVar(&c.siteName)
 	c.Arg("session", "The ID of the target session.").Required().StringVar(&c.session)
 	return c
 }
 
 func (c *kubeJoinCommand) getSessionMeta(ctx context.Context, tc *client.TeleportClient) (types.Session, error) {
-	sessions, err := tc.GetActiveSessions(ctx)
+	sessions, err := tc.GetActiveSessions(ctx, c.siteName)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -282,7 +284,7 @@ func (c *kubeSessionsCommand) run(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 
-	sessions, err := tc.GetActiveSessions(cf.Context)
+	sessions, err := tc.GetActiveSessions(cf.Context, "")
 	if err != nil {
 		return trace.Wrap(err)
 	}
