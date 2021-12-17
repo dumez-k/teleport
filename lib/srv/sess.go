@@ -1555,7 +1555,10 @@ func (s *session) join(ch ssh.Channel, req *ssh.Request, ctx *ServerContext, mod
 	}
 
 	if s.presenceEnabled {
-		ch.SendRequest(teleport.MFAPresenceRequest, false, nil)
+		_, err := ch.SendRequest(teleport.MFAPresenceRequest, false, nil)
+		if err != nil {
+			return nil, trace.WrapWithMessage(err, "failed to send MFA presence request")
+		}
 	}
 
 	p := newParty(s, ch, ctx)
