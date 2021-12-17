@@ -922,7 +922,7 @@ func verifySessionJoin(t *testing.T, username string, teleport *TeleInstance) {
 				return
 
 			case <-ticker.C:
-				err := cl.Join(context.TODO(), apidefaults.Namespace, session.ID(sessionID), personB)
+				err := cl.Join(context.TODO(), types.SessionPeerMode, apidefaults.Namespace, session.ID(sessionID), personB)
 				if err == nil {
 					sessionB <- nil
 					return
@@ -4267,7 +4267,7 @@ func testWindowChange(t *testing.T, suite *integrationTestSuite) {
 		}
 
 		for i := 0; i < 10; i++ {
-			err = cl.Join(context.TODO(), apidefaults.Namespace, session.ID(sessionID), personB)
+			err = cl.Join(context.TODO(), types.SessionPeerMode, apidefaults.Namespace, session.ID(sessionID), personB)
 			if err == nil || isSSHError(err) {
 				err = nil
 				break
