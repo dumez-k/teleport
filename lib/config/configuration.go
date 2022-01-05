@@ -1076,6 +1076,12 @@ func applyDatabasesConfig(fc *FileConfig, cfg *service.Config) error {
 				ProjectID:  database.GCP.ProjectID,
 				InstanceID: database.GCP.InstanceID,
 			},
+			AD: service.DatabaseAD{
+				KeytabFile: database.AD.KeytabFile,
+				Krb5File:   database.AD.Krb5File,
+				Realm:      database.AD.Realm,
+				SPN:        database.AD.SPN,
+			},
 		}
 		if err := db.CheckAndSetDefaults(); err != nil {
 			return trace.Wrap(err)

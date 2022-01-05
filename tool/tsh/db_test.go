@@ -501,6 +501,16 @@ func TestCliCommandBuilderGetConnectCommand(t *testing.T) {
 				"--tls",
 				"--tlsCertificateKeyFile", "/tmp/keys/example.com/bob-db/db.example.com/mysql-x509.pem",
 				"mydb"},
+		},
+		{
+			name:       "sqlserver",
+			dbProtocol: defaults.ProtocolSQLServer,
+			cmd: []string{mssqlBin,
+				"-S", "localhost,12345",
+				"-U", "myUser",
+				"-P", fixtures.UUID,
+				"-d", "mydb",
+			},
 			wantErr: false,
 		},
 	}
@@ -518,6 +528,7 @@ func TestCliCommandBuilderGetConnectCommand(t *testing.T) {
 			}
 
 			c := newCmdBuilder(tc, profile, database, "root", WithLocalProxy("localhost", 12345, ""))
+			c.uid = utils.NewFakeUID()
 			c.exe = tt.execer
 			got, err := c.getConnectCommand()
 			if tt.wantErr {

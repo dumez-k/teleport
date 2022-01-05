@@ -16,7 +16,11 @@ limitations under the License.
 
 package common
 
-import "golang.org/x/crypto/acme"
+import (
+	"github.com/gravitational/teleport/lib/defaults"
+	"github.com/gravitational/trace"
+	"golang.org/x/crypto/acme"
+)
 
 // Protocol is the TLS ALPN protocol type.
 type Protocol string
@@ -30,6 +34,9 @@ const (
 
 	// ProtocolMongoDB is TLS ALPN protocol value used to indicate Mongo protocol.
 	ProtocolMongoDB Protocol = "teleport-mongodb"
+
+	// ProtocolSQLSerevr is TLS ALPN protocol value used to indicate SQL Server protocol.
+	ProtocolSQLServer Protocol = "teleport-sqlserver"
 
 	// ProtocolProxySSH is TLS ALPN protocol value used to indicate Proxy SSH protocol.
 	ProtocolProxySSH Protocol = "teleport-proxy-ssh"
@@ -56,6 +63,7 @@ var SupportedProtocols = []Protocol{
 	ProtocolPostgres,
 	ProtocolMySQL,
 	ProtocolMongoDB,
+	ProtocolSQLServer,
 	ProtocolProxySSH,
 	ProtocolReverseTunnel,
 	ProtocolHTTP,
@@ -70,4 +78,20 @@ func ProtocolsToString(protocols []Protocol) []string {
 		out = append(out, string(v))
 	}
 	return out
+}
+
+// ToALPNProtocol maps provided database protocol to ALPN protocol.
+func ToALPNProtocol(dbProtocol string) (Protocol, error) {
+	switch dbProtocol {
+	case defaults.ProtocolMySQL:
+		return ProtocolMySQL, nil
+	case defaults.ProtocolPostgres, defaults.ProtocolCockroachDB:
+		return ProtocolPostgres, nil
+	case defaults.ProtocolMongoDB:
+		return ProtocolMongoDB, nil
+	case defaults.ProtocolSQLServer:
+		return ProtocolSQLServer, nil
+	default:
+		return "", trace.NotImplemented("%q protocol is not supported", dbProtocol)
+	}
 }

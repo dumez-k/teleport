@@ -24,14 +24,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gravitational/trace"
-
 	"github.com/gravitational/teleport/lib/client"
 	"github.com/gravitational/teleport/lib/client/db"
 	"github.com/gravitational/teleport/lib/client/db/mysql"
 	"github.com/gravitational/teleport/lib/client/db/postgres"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/tlsca"
+	"github.com/gravitational/teleport/lib/utils"
+
+	"github.com/gravitational/trace"
 )
 
 const (
@@ -47,6 +48,8 @@ const (
 	mongoshBin = "mongosh"
 	// mongoBin is the Mongo client binary name.
 	mongoBin = "mongo"
+	// mssqlBin is the SQL Server client program name.
+	mssqlBin = "mssql-cli"
 )
 
 // execer is an abstraction of Go's exec module, as this one doesn't specify any interfaces.
@@ -80,6 +83,7 @@ type cliCommandBuilder struct {
 	host        string
 	port        int
 	options     connectionCommandOpts
+	uid         utils.UID
 
 	exe execer
 }
@@ -107,6 +111,7 @@ func newCmdBuilder(tc *client.TeleportClient, profile *client.ProfileStatus,
 		port:        port,
 		options:     options,
 		rootCluster: rootClusterName,
+		uid:         utils.NewRealUID(),
 
 		exe: &systemExecer{},
 	}
@@ -125,6 +130,9 @@ func (c *cliCommandBuilder) getConnectCommand() (*exec.Cmd, error) {
 
 	case defaults.ProtocolMongoDB:
 		return c.getMongoCommand(), nil
+
+	case defaults.ProtocolSQLServer:
+		return c.getSQLServerCommand(), nil
 	}
 
 	return nil, trace.BadParameter("unsupported database protocol: %v", c.db)
@@ -314,4 +322,21 @@ func (c *cliCommandBuilder) getMongoCommand() *exec.Cmd {
 
 	// fall back to `mongo` if `mongosh` isn't found
 	return exec.Command(mongoBin, args...)
+}
+
+func (c *cliCommandBuilder) getSQLServerCommand() *exec.Cmd {
+	args := []string{
+		// Host and port must be comma-separated.
+		"-S", fmt.Sprintf("%v,%v", c.host, c.port),
+		"-U", c.db.Username,
+		// Password is required by the client but doesn't matter as we're
+		// connecting to local proxy.
+		"-P", c.uid.New(),
+	}
+
+	if c.db.Database != "" {
+		args = append(args, "-d", c.db.Database)
+	}
+
+	return exec.Command(mssqlBin, args...)
 }

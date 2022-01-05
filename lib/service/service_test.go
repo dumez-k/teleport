@@ -491,6 +491,7 @@ func TestSetupProxyTLSConfig(t *testing.T) {
 				"teleport-postgres",
 				"teleport-mysql",
 				"teleport-mongodb",
+				"teleport-sqlserver",
 				"teleport-proxy-ssh",
 				"teleport-reversetunnel",
 				"teleport-auth@",

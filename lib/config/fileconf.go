@@ -1034,6 +1034,20 @@ type Database struct {
 	AWS DatabaseAWS `yaml:"aws"`
 	// GCP contains GCP specific settings for Cloud SQL databases.
 	GCP DatabaseGCP `yaml:"gcp"`
+	// AD contains Active Directory database configuration.
+	AD DatabaseAD `yaml:"ad"`
+}
+
+// DatabaseAD contains database Active Directory configuration.
+type DatabaseAD struct {
+	// KeytabFile is the path to the Kerberos keytab file.
+	KeytabFile string `yaml:"keytab_file"`
+	// Krb5File is the path to the Kerberos configuration file. Defaults to /etc/krb5.conf.
+	Krb5File string `yaml:"krb5_file,omitempty"`
+	// Realm is the Kerberos realm the database resides in.
+	Realm string `yaml:"realm"`
+	// SPN is the service principal name for the database.
+	SPN string `yaml:"spn"`
 }
 
 // DatabaseTLS keeps TLS settings used when connecting to database.
