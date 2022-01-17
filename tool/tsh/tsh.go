@@ -261,8 +261,13 @@ type CLIConf struct {
 	// AWSCommandArgs contains arguments that will be forwarded to AWS CLI binary.
 	AWSCommandArgs []string
 
-	Reason   string
-	Invited  string
+	// Reason is the reason for starting an ssh or kube session.
+	Reason string
+
+	// Invited is a list of invited users to an ssh or kube session.
+	Invited string
+
+	// JoinMode is the participant mode someone is joining a session as.
 	JoinMode string
 }
 

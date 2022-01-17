@@ -3592,7 +3592,7 @@ func (g *GRPCServer) ListResources(ctx context.Context, req *proto.ListResources
 	return resp, nil
 }
 
-func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSessionRequest) (*types.SessionV3, error) {
+func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSessionRequest) (*types.SessionTrackerV1, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -3602,7 +3602,7 @@ func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSession
 		return nil, trace.Wrap(err)
 	}
 
-	defined, ok := session.(*types.SessionV3)
+	defined, ok := session.(*types.SessionTrackerV1)
 	if !ok {
 		return nil, trace.BadParameter("unexpected session type %T", session)
 	}
@@ -3610,7 +3610,7 @@ func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSession
 	return defined, nil
 }
 
-func (g *GRPCServer) GetSession(ctx context.Context, req *proto.GetSessionRequest) (*types.SessionV3, error) {
+func (g *GRPCServer) GetSession(ctx context.Context, req *proto.GetSessionRequest) (*types.SessionTrackerV1, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -3620,7 +3620,7 @@ func (g *GRPCServer) GetSession(ctx context.Context, req *proto.GetSessionReques
 		return nil, trace.Wrap(err)
 	}
 
-	defined, ok := session.(*types.SessionV3)
+	defined, ok := session.(*types.SessionTrackerV1)
 	if !ok {
 		return nil, trace.BadParameter("unexpected session type %T", session)
 	}
@@ -3638,9 +3638,9 @@ func (g *GRPCServer) GetActiveSessions(ctx context.Context, req *empty.Empty) (*
 		return nil, trace.Wrap(err)
 	}
 
-	var definedArr []*types.SessionV3
+	var definedArr []*types.SessionTrackerV1
 	for _, session := range sessions {
-		defined, ok := session.(*types.SessionV3)
+		defined, ok := session.(*types.SessionTrackerV1)
 		if !ok {
 			return nil, trace.BadParameter("unexpected session type %T", session)
 		}

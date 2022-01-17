@@ -1026,7 +1026,7 @@ func (s *session) startInteractive(ch ssh.Channel, ctx *ServerContext) error {
 			return trace.Wrap(err)
 		}
 	}
-	s.out = NewTermManager("/bin/bash", NewSwitchWriter(utils.NewTrackingWriter(NewMultiWriter())))
+	s.out = NewTermManager(NewSwitchWriter(utils.NewTrackingWriter(NewMultiWriter())))
 	inReader, inWriter := io.Pipe()
 	s.inWriter = inWriter
 	s.in = NewBreakReader(utils.NewTrackingReader(inReader))
@@ -1740,7 +1740,7 @@ func (p *party) Close() (err error) {
 	return err
 }
 
-func (s *session) trackerGet() (types.Session, error) {
+func (s *session) trackerGet() (types.SessionTracker, error) {
 	if s.registry.auth == nil {
 		return nil, trace.BadParameter("cannot fetch session without auth service")
 	}

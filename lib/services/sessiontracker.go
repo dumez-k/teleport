@@ -29,17 +29,17 @@ import (
 )
 
 const (
-	sessionV2Prefix               = "session_v2"
-	sessionV2List                 = "list"
-	gcDelay         time.Duration = time.Minute * 5
+	sessionPrefix               = "session_tracker"
+	sessionList                 = "list"
+	gcDelay       time.Duration = time.Minute * 5
 )
 
-// SessionV2 is a realtime session service that has information about
+// SessionTrackerService is a realtime session service that has information about
 // sessions that are in-flight in the cluster at the moment.
-type SessionV2 interface {
-	GetActiveSessionTrackers(ctx context.Context) ([]types.Session, error)
-	GetSessionTracker(ctx context.Context, sessionID string) (types.Session, error)
-	CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.Session, error)
+type SessionTrackerService interface {
+	GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error)
+	GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error)
+	CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error)
 	UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error
 	RemoveSessionTracker(ctx context.Context, sessionID string) error
 	UpdatePresence(ctx context.Context, sessionID, user string) error
@@ -49,8 +49,8 @@ type sessionV2 struct {
 	bk backend.Backend
 }
 
-func NewSessionV2Service(bk backend.Backend) (SessionV2, error) {
-	_, err := bk.Get(context.TODO(), backend.Key(sessionV2Prefix, sessionV2List))
+func NewSessionTrackerService(bk backend.Backend) (SessionTrackerService, error) {
+	_, err := bk.Get(context.TODO(), backend.Key(sessionPrefix, sessionList))
 	if trace.IsNotFound(err) {
 		err := createList(bk)
 		if err != nil {
@@ -69,7 +69,7 @@ func createList(bk backend.Backend) error {
 		return trace.Wrap(err)
 	}
 
-	_, err = bk.Create(context.TODO(), backend.Item{Key: backend.Key(sessionV2Prefix, sessionV2List), Value: data})
+	_, err = bk.Create(context.TODO(), backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: data})
 	if err != nil {
 		return err
 	}
@@ -77,8 +77,8 @@ func createList(bk backend.Backend) error {
 	return nil
 }
 
-func (s *sessionV2) loadSession(ctx context.Context, sessionID string) (types.Session, error) {
-	sessionJSON, err := s.bk.Get(ctx, backend.Key(sessionV2Prefix, sessionID))
+func (s *sessionV2) loadSession(ctx context.Context, sessionID string) (types.SessionTracker, error) {
+	sessionJSON, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionID))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -92,7 +92,7 @@ func (s *sessionV2) loadSession(ctx context.Context, sessionID string) (types.Se
 }
 
 func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) error {
-	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionV2Prefix, sessionID))
+	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionID))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -109,7 +109,7 @@ func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) 
 		return trace.Wrap(err)
 	}
 
-	item := backend.Item{Key: backend.Key(sessionV2Prefix, sessionID), Value: sessionJSON}
+	item := backend.Item{Key: backend.Key(sessionPrefix, sessionID), Value: sessionJSON}
 	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
 	if trace.IsCompareFailed(err) {
 		log.Infof("Session resource %v presence update failed, retrying: %v", sessionID, err)
@@ -119,7 +119,7 @@ func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) 
 	}
 }
 
-func (s *sessionV2) GetSessionTracker(ctx context.Context, sessionID string) (types.Session, error) {
+func (s *sessionV2) GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error) {
 	session, err := s.loadSession(ctx, sessionID)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -128,13 +128,13 @@ func (s *sessionV2) GetSessionTracker(ctx context.Context, sessionID string) (ty
 	return session, nil
 }
 
-func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.Session, error) {
+func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
 	sessionList, err := s.getSessionList(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	sessions := make([]types.Session, len(sessionList))
+	sessions := make([]types.SessionTracker, len(sessionList))
 	for i, sessionID := range sessionList {
 		session, err := s.loadSession(ctx, sessionID)
 		if err != nil {
@@ -147,10 +147,10 @@ func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.Sessi
 	return sessions, nil
 }
 
-func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.Session, error) {
+func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
 	now := time.Now().UTC()
 
-	spec := types.SessionSpecV3{
+	spec := types.SessionTrackerSpecV1{
 		SessionID:         req.ID,
 		Namespace:         req.Namespace,
 		Type:              req.Type,
@@ -183,7 +183,7 @@ func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateS
 		return nil, trace.Wrap(err)
 	}
 
-	item := backend.Item{Key: backend.Key(sessionV2Prefix, session.GetID()), Value: json}
+	item := backend.Item{Key: backend.Key(sessionPrefix, session.GetID()), Value: json}
 	_, err = s.bk.Create(ctx, item)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -193,7 +193,7 @@ func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateS
 }
 
 func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
-	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionV2Prefix, req.SessionID))
+	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, req.SessionID))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -204,7 +204,7 @@ func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateS
 	}
 
 	switch session := session.(type) {
-	case *types.SessionV3:
+	case *types.SessionTrackerV1:
 		switch update := req.Update.(type) {
 		case *proto.UpdateSessionRequest_UpdateState:
 			session.SetState(update.UpdateState.State)
@@ -222,7 +222,7 @@ func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateS
 		return trace.Wrap(err)
 	}
 
-	item := backend.Item{Key: backend.Key(sessionV2Prefix, req.SessionID), Value: sessionJSON}
+	item := backend.Item{Key: backend.Key(sessionPrefix, req.SessionID), Value: sessionJSON}
 	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
 	if trace.IsCompareFailed(err) {
 		return s.UpdateSessionTracker(ctx, req)
@@ -237,11 +237,11 @@ func (s *sessionV2) RemoveSessionTracker(ctx context.Context, sessionID string) 
 		return trace.Wrap(err)
 	}
 
-	return trace.Wrap(s.bk.Delete(ctx, backend.Key(sessionV2Prefix, sessionID)))
+	return trace.Wrap(s.bk.Delete(ctx, backend.Key(sessionPrefix, sessionID)))
 }
 
 func (s *sessionV2) addSessionToList(ctx context.Context, sessionID string) error {
-	listItem, err := s.bk.Get(ctx, backend.Key(sessionV2Prefix, sessionV2List))
+	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -258,13 +258,13 @@ func (s *sessionV2) addSessionToList(ctx context.Context, sessionID string) erro
 		return trace.Wrap(err)
 	}
 
-	newListItem := backend.Item{Key: backend.Key(sessionV2Prefix, sessionV2List), Value: listJSON}
+	newListItem := backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: listJSON}
 	_, err = s.bk.CompareAndSwap(ctx, *listItem, newListItem)
 	return trace.Wrap(err)
 }
 
 func (s *sessionV2) removeSessionFromList(ctx context.Context, sessionID string) error {
-	listItem, err := s.bk.Get(ctx, backend.Key(sessionV2Prefix, sessionV2List))
+	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -307,13 +307,13 @@ func (s *sessionV2) removeSessionFromList(ctx context.Context, sessionID string)
 		return trace.Wrap(err)
 	}
 
-	newListItem := backend.Item{Key: backend.Key(sessionV2Prefix, sessionV2List), Value: listJSON}
+	newListItem := backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: listJSON}
 	_, err = s.bk.Update(ctx, newListItem)
 	return trace.Wrap(err)
 }
 
 func (s *sessionV2) getSessionList(ctx context.Context) ([]string, error) {
-	listItem, err := s.bk.Get(ctx, backend.Key(sessionV2Prefix, sessionV2List))
+	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -324,8 +324,8 @@ func (s *sessionV2) getSessionList(ctx context.Context) ([]string, error) {
 }
 
 // unmarshalSession unmarshals the Session resource from JSON.
-func unmarshalSession(bytes []byte, opts ...MarshalOption) (types.Session, error) {
-	var session types.SessionV3
+func unmarshalSession(bytes []byte, opts ...MarshalOption) (types.SessionTracker, error) {
+	var session types.SessionTrackerV1
 
 	if len(bytes) == 0 {
 		return nil, trace.BadParameter("missing resource data")
@@ -356,7 +356,7 @@ func unmarshalSession(bytes []byte, opts ...MarshalOption) (types.Session, error
 }
 
 // marshalSession marshals the Session resource to JSON.
-func marshalSession(session types.Session, opts ...MarshalOption) ([]byte, error) {
+func marshalSession(session types.SessionTracker, opts ...MarshalOption) ([]byte, error) {
 	if err := session.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -367,7 +367,7 @@ func marshalSession(session types.Session, opts ...MarshalOption) ([]byte, error
 	}
 
 	switch session := session.(type) {
-	case *types.SessionV3:
+	case *types.SessionTrackerV1:
 		if !cfg.PreserveResourceID {
 			copy := *session
 			copy.SetResourceID(0)

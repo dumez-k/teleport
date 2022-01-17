@@ -2399,24 +2399,24 @@ func (c *Client) GetResources(ctx context.Context, namespace, resourceType strin
 	return resources, nil
 }
 
-func (c *Client) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.Session, error) {
+func (c *Client) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
 	resp, err := c.grpc.CreateSession(ctx, req)
 	return resp, trail.FromGRPC(err)
 }
 
-func (c *Client) GetSessionTracker(ctx context.Context, sessionID string) (types.Session, error) {
+func (c *Client) GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error) {
 	req := &proto.GetSessionRequest{SessionID: sessionID}
 	resp, err := c.grpc.GetSession(ctx, req)
 	return resp, trail.FromGRPC(err)
 }
 
-func (c *Client) GetActiveSessionTrackers(ctx context.Context) ([]types.Session, error) {
+func (c *Client) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
 	resp, err := c.grpc.GetActiveSessions(ctx, &empty.Empty{})
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
 
-	sessions := make([]types.Session, len(resp.Sessions))
+	sessions := make([]types.SessionTracker, len(resp.Sessions))
 	for i, s := range resp.Sessions {
 		sessions[i] = s
 	}

@@ -1475,7 +1475,7 @@ message GetSessionRequest {
 // GetActiveSessionsResponse is a response containing active sessions.
 message GetActiveSessionsResponse {
     // Sessions is a list of active sessions.
-    repeated types.SessionV3 Sessions = 1;
+    repeated types.SessionTrackerV1 Sessions = 1;
 }
 
 // RemoveSessionRequest is a request to remove a session.
@@ -1530,10 +1530,10 @@ service AuthService {
         returns (stream MFAAuthenticateChallenge);
 
     // CreateSession creates a new session resource.
-    rpc CreateSession(CreateSessionRequest) returns (types.SessionV3);
+    rpc CreateSession(CreateSessionRequest) returns (types.SessionTrackerV1);
 
     // GetSessionRequest fetches a session resource.
-    rpc GetSession(GetSessionRequest) returns (types.SessionV3);
+    rpc GetSession(GetSessionRequest) returns (types.SessionTrackerV1);
 
     // GetActiveSessions returns a list of active sessions.
     rpc GetActiveSessions(google.protobuf.Empty) returns (GetActiveSessionsResponse);

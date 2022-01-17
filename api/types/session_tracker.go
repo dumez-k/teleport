@@ -33,7 +33,7 @@ const (
 type SessionKind string
 type SessionParticipantMode string
 
-type Session interface {
+type SessionTracker interface {
 	Resource
 
 	GetID() string
@@ -75,12 +75,17 @@ type Session interface {
 	GetHostUser() string
 }
 
-func NewSession(spec SessionSpecV3) (Session, error) {
+func NewSession(spec SessionTrackerSpecV1) (SessionTracker, error) {
 	meta := Metadata{
 		Name: spec.SessionID,
 	}
 
-	session := &SessionV3{Metadata: meta, Spec: spec}
+	session := &SessionTrackerV1{
+		Kind:     KindSessionTracker,
+		Version:  V1,
+		Metadata: meta,
+		Spec:     spec,
+	}
 
 	if err := session.Metadata.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
@@ -90,61 +95,61 @@ func NewSession(spec SessionSpecV3) (Session, error) {
 }
 
 // GetVersion returns resource version.
-func (c *SessionV3) GetVersion() string {
+func (c *SessionTrackerV1) GetVersion() string {
 	return c.Version
 }
 
 // GetName returns the name of the resource.
-func (c *SessionV3) GetName() string {
+func (c *SessionTrackerV1) GetName() string {
 	return c.Metadata.Name
 }
 
 // SetName sets the name of the resource.
-func (c *SessionV3) SetName(e string) {
+func (c *SessionTrackerV1) SetName(e string) {
 	c.Metadata.Name = e
 }
 
 // SetExpiry sets expiry time for the object.
-func (c *SessionV3) SetExpiry(expires time.Time) {
+func (c *SessionTrackerV1) SetExpiry(expires time.Time) {
 	c.Metadata.SetExpiry(expires)
 }
 
 // Expiry returns object expiry setting.
-func (c *SessionV3) Expiry() time.Time {
+func (c *SessionTrackerV1) Expiry() time.Time {
 	return c.Metadata.Expiry()
 }
 
 // GetMetadata returns object metadata.
-func (c *SessionV3) GetMetadata() Metadata {
+func (c *SessionTrackerV1) GetMetadata() Metadata {
 	return c.Metadata
 }
 
 // GetResourceID returns resource ID.
-func (c *SessionV3) GetResourceID() int64 {
+func (c *SessionTrackerV1) GetResourceID() int64 {
 	return c.Metadata.ID
 }
 
 // SetResourceID sets resource ID.
-func (c *SessionV3) SetResourceID(id int64) {
+func (c *SessionTrackerV1) SetResourceID(id int64) {
 	c.Metadata.ID = id
 }
 
 // GetKind returns resource kind.
-func (c *SessionV3) GetKind() string {
+func (c *SessionTrackerV1) GetKind() string {
 	return c.Kind
 }
 
 // GetSubKind returns resource subkind.
-func (c *SessionV3) GetSubKind() string {
+func (c *SessionTrackerV1) GetSubKind() string {
 	return c.SubKind
 }
 
 // SetSubKind sets resource subkind.
-func (c *SessionV3) SetSubKind(sk string) {
+func (c *SessionTrackerV1) SetSubKind(sk string) {
 	c.SubKind = sk
 }
 
-func (s *SessionV3) CheckAndSetDefaults() error {
+func (s *SessionTrackerV1) CheckAndSetDefaults() error {
 	s.Kind = KindSessionTracker
 	s.Version = V3
 
@@ -155,23 +160,23 @@ func (s *SessionV3) CheckAndSetDefaults() error {
 	return nil
 }
 
-func (s *SessionV3) GetID() string {
+func (s *SessionTrackerV1) GetID() string {
 	return s.Spec.SessionID
 }
 
-func (s *SessionV3) GetNamespace() string {
+func (s *SessionTrackerV1) GetNamespace() string {
 	return s.Spec.Namespace
 }
 
-func (s *SessionV3) GetSessionKind() SessionKind {
+func (s *SessionTrackerV1) GetSessionKind() SessionKind {
 	return SessionKind(s.Spec.Type)
 }
 
-func (s *SessionV3) GetState() SessionState {
+func (s *SessionTrackerV1) GetState() SessionState {
 	return s.Spec.State
 }
 
-func (s *SessionV3) SetState(state SessionState) error {
+func (s *SessionTrackerV1) SetState(state SessionState) error {
 	switch state {
 	default:
 		return trace.BadParameter("invalid session state: %v", state)
@@ -185,47 +190,47 @@ func (s *SessionV3) SetState(state SessionState) error {
 	}
 }
 
-func (s *SessionV3) GetCreated() time.Time {
+func (s *SessionTrackerV1) GetCreated() time.Time {
 	return s.Spec.Created
 }
 
-func (s *SessionV3) GetExpires() time.Time {
+func (s *SessionTrackerV1) GetExpires() time.Time {
 	return s.Spec.Expires
 }
 
-func (s *SessionV3) GetReason() string {
+func (s *SessionTrackerV1) GetReason() string {
 	return s.Spec.Reason
 }
 
-func (s *SessionV3) GetInvited() []string {
+func (s *SessionTrackerV1) GetInvited() []string {
 	return s.Spec.Invited
 }
 
-func (s *SessionV3) GetHostname() string {
+func (s *SessionTrackerV1) GetHostname() string {
 	return s.Spec.Hostname
 }
 
-func (s *SessionV3) GetAddress() string {
+func (s *SessionTrackerV1) GetAddress() string {
 	return s.Spec.Address
 }
 
-func (s *SessionV3) GetClustername() string {
+func (s *SessionTrackerV1) GetClustername() string {
 	return s.Spec.ClusterName
 }
 
-func (s *SessionV3) GetLogin() string {
+func (s *SessionTrackerV1) GetLogin() string {
 	return s.Spec.Login
 }
 
-func (s *SessionV3) GetParticipants() []*Participant {
+func (s *SessionTrackerV1) GetParticipants() []*Participant {
 	return s.Spec.Participants
 }
 
-func (s *SessionV3) AddParticipant(participant *Participant) {
+func (s *SessionTrackerV1) AddParticipant(participant *Participant) {
 	s.Spec.Participants = append(s.Spec.Participants, participant)
 }
 
-func (s *SessionV3) RemoveParticipant(id string) error {
+func (s *SessionTrackerV1) RemoveParticipant(id string) error {
 	for i, participant := range s.Spec.Participants {
 		if participant.ID == id {
 			s.Spec.Participants = append(s.Spec.Participants[:i], s.Spec.Participants[i+1:]...)
@@ -236,15 +241,15 @@ func (s *SessionV3) RemoveParticipant(id string) error {
 	return trace.BadParameter("participant %v not found", id)
 }
 
-func (s *SessionV3) GetKubeCluster() string {
+func (s *SessionTrackerV1) GetKubeCluster() string {
 	return s.Spec.KubernetesCluster
 }
 
-func (s *SessionV3) GetHostUser() string {
+func (s *SessionTrackerV1) GetHostUser() string {
 	return s.Spec.HostUser
 }
 
-func (s *SessionV3) UpdatePresence(user string) error {
+func (s *SessionTrackerV1) UpdatePresence(user string) error {
 	for _, participant := range s.Spec.Participants {
 		if participant.User == user {
 			participant.LastActive = time.Now().UTC()

@@ -73,7 +73,7 @@ type NodeClient struct {
 	OnMFA     func()
 }
 
-func (proxy *ProxyClient) GetActiveSessions(ctx context.Context) ([]types.Session, error) {
+func (proxy *ProxyClient) GetActiveSessions(ctx context.Context) ([]types.SessionTracker, error) {
 	auth, err := proxy.ConnectToCurrentCluster(ctx, false)
 	if err != nil {
 		return nil, trace.Wrap(err)

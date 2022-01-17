@@ -18,6 +18,7 @@ package utils
 
 import "github.com/gravitational/trace"
 
+// WriteAll writes a buffer data to a writer until all data is written or an error is encountered.
 func WriteAll(w func(p []byte) (int, error), data []byte) error {
 	for len(data) > 0 {
 		n, err := w(data)

@@ -21,39 +21,17 @@ import (
 	"github.com/gravitational/trace"
 )
 
-type termState int
-
-const (
-	TermStateShell termState = 1
-	TermStateApp   termState = 2
-)
-
+// TermManager handles the output stream of sessions.
+// It deals with tasks like stream manipulation in order to enable message injection.
 type TermManager struct {
-	state    termState
-	lastline []byte
-	W        *SwitchWriter
-	messages []string
-	mu       sync.Mutex
+	mu sync.Mutex
+	W  *SwitchWriter
 }
 
-func NewTermManager(command string, w *SwitchWriter) *TermManager {
-	//var state termState
-	//isRecognizedShell := strings.HasSuffix(command, "sh") ||
-	//	strings.HasSuffix(command, "bash") ||
-	//	strings.HasSuffix(command, "zsh") ||
-	//	strings.HasSuffix(command, "fish") ||
-	//	len(command) == 0
-	//
-	//if isRecognizedShell {
-	//	state = TermStateShell
-	//} else {
-	//	state = TermStateApp
-	//}
-
+// NewTermManager creates a new TermManager.
+func NewTermManager(w *SwitchWriter) *TermManager {
 	return &TermManager{
-		state:    TermStateShell,
-		lastline: nil,
-		W:        w,
+		W: w,
 	}
 }
 
@@ -66,86 +44,15 @@ func (g *TermManager) Write(p []byte) (int, error) {
 		return 0, trace.Wrap(err)
 	}
 
-	preState := g.state
-	//g.update(p[:count])
-	if preState == TermStateApp && g.state == TermStateShell {
-		err := g.flushMessages()
-		if err != nil {
-			return 0, trace.Wrap(err)
-		}
-	}
-
 	return count, nil
 }
 
-func (g *TermManager) flushMessages() error {
-	for _, message := range g.messages {
-		err := utils.WriteAll(g.W.WriteUnconditional, []byte(message))
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
-
-	g.messages = nil
-	return nil
-}
-
+// BroadcastMessage injects a message into the stream.
 func (g *TermManager) BroadcastMessage(message string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if g.state == TermStateShell {
-		data := []byte("\n\rTeleport > " + message + "\n\r")
-		err := utils.WriteAll(g.W.WriteUnconditional, data)
-		return trace.Wrap(err)
-	}
-
-	g.messages = append(g.messages, message)
-	return nil
+	data := []byte("\nTeleport > " + message + "\n")
+	err := utils.WriteAll(g.W.WriteUnconditional, data)
+	return trace.Wrap(err)
 }
-
-//var shellPatterns = []*regexp.Regexp{
-//	regexp.MustCompile(`^bash.*`),
-//	regexp.MustCompile(`^zsh.*`),
-//	regexp.MustCompile(`^sh.*`),
-//	regexp.MustCompile(`^fish.*`),
-//	regexp.MustCompile(`^.+@.+:\/#`),
-//}
-
-//func (g *TermManager) update(data []byte) {
-//lastRet := findLast(data, '\n')
-//if lastRet == math.MaxInt {
-//	g.lastline = append(g.lastline, data...)
-//} else {
-//	g.lastline = data[lastRet:]
-//}
-//
-//target := string(g.lastline)
-//if strings.HasPrefix("Teleport > ", string(g.lastline)) {
-//	g.state = TermStateShell
-//	return
-//}
-//
-//if len(g.lastline) > 0 {
-//	for _, pattern := range shellPatterns {
-//		if pattern.MatchString(target) {
-//			g.state = TermStateShell
-//			return
-//		}
-//	}
-//}
-//
-//g.state = TermStateApp
-//}
-
-//func findLast(haystack []byte, needle byte) int {
-//	location := math.MaxInt
-//
-//	for i, b := range haystack {
-//		if b == needle {
-//			location = i
-//		}
-//	}
-//
-//	return location
-//}

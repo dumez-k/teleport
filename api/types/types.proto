@@ -2756,8 +2756,8 @@ message RecoveryCode {
     bool IsUsed = 2 [ (gogoproto.jsontag) = "is_used" ];
 }
 
-// SessionV3 represents a live session resource.
-message SessionV3 {
+// SessionTrackerV1 represents a live session resource.
+message SessionTrackerV1 {
     // Kind is a resource kind.
     string Kind = 1 [ (gogoproto.jsontag) = "kind" ];
 
@@ -2771,11 +2771,11 @@ message SessionV3 {
     Metadata Metadata = 4 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "metadata" ];
 
     // Spec is a session specification.
-    SessionSpecV3 Spec = 5 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "spec" ];
+    SessionTrackerSpecV1 Spec = 5 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "spec" ];
 }
 
-// SessionSpecV3 is the specification for a live session.
-message SessionSpecV3 {
+// SessionTrackerSpecV1 is the specification for a live session.
+message SessionTrackerSpecV1 {
     // SessionID is unique identifier of this session.
     string SessionID = 1 [ (gogoproto.jsontag) = "session_id,omitempty" ];
 

@@ -113,7 +113,7 @@ func newKubeJoinCommand(parent *kingpin.CmdClause) *kubeJoinCommand {
 	return c
 }
 
-func (c *kubeJoinCommand) getSessionMeta(ctx context.Context, tc *client.TeleportClient) (types.Session, error) {
+func (c *kubeJoinCommand) getSessionMeta(ctx context.Context, tc *client.TeleportClient) (types.SessionTracker, error) {
 	sessions, err := tc.GetActiveSessions(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -491,7 +491,7 @@ func (c *kubeSessionsCommand) run(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 
-	filteredSessions := make([]types.Session, 0)
+	filteredSessions := make([]types.SessionTracker, 0)
 	for _, session := range sessions {
 		if session.GetSessionKind() == types.KubernetesSessionKind {
 			filteredSessions = append(filteredSessions, session)
@@ -502,7 +502,7 @@ func (c *kubeSessionsCommand) run(cf *CLIConf) error {
 	return nil
 }
 
-func printSessions(sessions []types.Session) {
+func printSessions(sessions []types.SessionTracker) {
 	table := asciitable.MakeTable([]string{"ID", "State", "Created", "Hostname", "Address", "Login", "Reason"})
 	for _, s := range sessions {
 		table.AddRow([]string{s.GetID(), s.GetState().String(), s.GetCreated().Format(time.RFC3339), s.GetHostname(), s.GetAddress(), s.GetLogin(), s.GetReason()})

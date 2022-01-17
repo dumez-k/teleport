@@ -305,9 +305,7 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 	}
 
 	accessEvaluator := auth.NewSessionAccessEvaluator(roles, types.KubernetesSessionKind)
-
-	cmd := req.URL.Query()["command"][0]
-	stdout := srv.NewTermManager(cmd, srv.NewSwitchWriter(utils.NewTrackingWriter(srv.NewMultiWriter())))
+	stdout := srv.NewTermManager(srv.NewSwitchWriter(utils.NewTrackingWriter(srv.NewMultiWriter())))
 
 	err = stdout.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", id.String()))
 	if err != nil {
@@ -1083,7 +1081,7 @@ func getRolesByName(forwarder *Forwarder, roleNames []string) ([]types.Role, err
 	return roles, nil
 }
 
-func (s *session) trackerGet() (types.Session, error) {
+func (s *session) trackerGet() (types.SessionTracker, error) {
 	sess, err := s.forwarder.cfg.AuthClient.GetSessionTracker(s.forwarder.ctx, s.id.String())
 	if err != nil {
 		return nil, trace.Wrap(err)

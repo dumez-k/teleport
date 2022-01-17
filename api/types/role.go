@@ -138,7 +138,10 @@ type Role interface {
 	// SetWindowsLogins sets Windows desktop logins for allow or deny condition.
 	SetWindowsLogins(RoleConditionType, []string)
 
+	// GetSessionRequirePolicies returns the RBAC required policies for a session.
 	GetSessionRequirePolicies() []*SessionRequirePolicy
+
+	// SetSessionRequirePolicies sets the RBAC required policies for a session.
 	GetSessionJoinPolicies() []*SessionJoinPolicy
 }
 
@@ -1068,10 +1071,12 @@ func (e WhereExpr) String() string {
 	return ""
 }
 
+// GetSessionRequirePolicies returns the RBAC required policies for a session.
 func (r *RoleV5) GetSessionRequirePolicies() []*SessionRequirePolicy {
 	return r.Spec.Allow.RequireSessionJoin
 }
 
+// SetSessionRequirePolicies sets the RBAC required policies for a session.
 func (r *RoleV5) GetSessionJoinPolicies() []*SessionJoinPolicy {
 	return r.Spec.Allow.JoinSessions
 }

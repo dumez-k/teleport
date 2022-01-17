@@ -617,10 +617,13 @@ const (
 	// version they are running.
 	VersionRequest = "x-teleport-version"
 
+	// ForceTerminateRequest is an SSH request to forcefully terminate a session.
 	ForceTerminateRequest = "x-teleport-force-terminate"
 
+	// SSHJoinModeEnv is the SSH environment variable that contains the requested participant mode.
 	SSHJoinModeEnv = "x-teleport-join-mode"
 
+	// MFAPresenceRequest is an SSH request to notify clients that MFA presence is required for a session.
 	MFAPresenceRequest = "x-teleport-mfa-presence"
 )
 

@@ -145,8 +145,8 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 	if cfg.WindowsDesktops == nil {
 		cfg.WindowsDesktops = local.NewWindowsDesktopService(cfg.Backend)
 	}
-	if cfg.SessionV2 == nil {
-		cfg.SessionV2, err = services.NewSessionV2Service(cfg.Backend)
+	if cfg.SessionTrackerService == nil {
+		cfg.SessionTrackerService, err = services.NewSessionTrackerService(cfg.Backend)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -185,20 +185,20 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 		emitter:         cfg.Emitter,
 		streamer:        cfg.Streamer,
 		Services: Services{
-			Trust:                cfg.Trust,
-			Presence:             cfg.Presence,
-			Provisioner:          cfg.Provisioner,
-			Identity:             cfg.Identity,
-			Access:               cfg.Access,
-			DynamicAccessExt:     cfg.DynamicAccessExt,
-			ClusterConfiguration: cfg.ClusterConfiguration,
-			Restrictions:         cfg.Restrictions,
-			Apps:                 cfg.Apps,
-			Databases:            cfg.Databases,
-			IAuditLog:            cfg.AuditLog,
-			Events:               cfg.Events,
-			WindowsDesktops:      cfg.WindowsDesktops,
-			SessionV2:            cfg.SessionV2,
+			Trust:                 cfg.Trust,
+			Presence:              cfg.Presence,
+			Provisioner:           cfg.Provisioner,
+			Identity:              cfg.Identity,
+			Access:                cfg.Access,
+			DynamicAccessExt:      cfg.DynamicAccessExt,
+			ClusterConfiguration:  cfg.ClusterConfiguration,
+			Restrictions:          cfg.Restrictions,
+			Apps:                  cfg.Apps,
+			Databases:             cfg.Databases,
+			IAuditLog:             cfg.AuditLog,
+			Events:                cfg.Events,
+			WindowsDesktops:       cfg.WindowsDesktops,
+			SessionTrackerService: cfg.SessionTrackerService,
 		},
 		keyStore: keyStore,
 	}
@@ -224,7 +224,7 @@ type Services struct {
 	services.Apps
 	services.Databases
 	services.WindowsDesktops
-	services.SessionV2
+	services.SessionTrackerService
 	types.Events
 	events.IAuditLog
 }
@@ -2924,20 +2924,20 @@ func (a *Server) GetApp(ctx context.Context, name string) (types.Application, er
 	return a.GetCache().GetApp(ctx, name)
 }
 
-func (a *Server) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.Session, error) {
-	return a.SessionV2.CreateSessionTracker(ctx, req)
+func (a *Server) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
+	return a.SessionTrackerService.CreateSessionTracker(ctx, req)
 }
 
-func (a *Server) GetActiveSessionTrackers(ctx context.Context) ([]types.Session, error) {
-	return a.SessionV2.GetActiveSessionTrackers(ctx)
+func (a *Server) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
+	return a.SessionTrackerService.GetActiveSessionTrackers(ctx)
 }
 
 func (a *Server) RemoveSessionTracker(ctx context.Context, sessionID string) error {
-	return a.SessionV2.RemoveSessionTracker(ctx, sessionID)
+	return a.SessionTrackerService.RemoveSessionTracker(ctx, sessionID)
 }
 
 func (a *Server) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
-	return a.SessionV2.UpdateSessionTracker(ctx, req)
+	return a.SessionTrackerService.UpdateSessionTracker(ctx, req)
 }
 
 // GetDatabaseServers returns all registers database proxy servers.

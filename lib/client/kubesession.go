@@ -40,10 +40,10 @@ type KubeSession struct {
 	term      *terminal.Terminal
 	close     *utils.CloseBroadcaster
 	closeWait *sync.WaitGroup
-	meta      types.Session
+	meta      types.SessionTracker
 }
 
-func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.Session, key *Key, kubeAddr string, tlsServer string, mode types.SessionParticipantMode) (*KubeSession, error) {
+func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionTracker, key *Key, kubeAddr string, tlsServer string, mode types.SessionParticipantMode) (*KubeSession, error) {
 	close := utils.NewCloseBroadcaster()
 	closeWait := &sync.WaitGroup{}
 	joinEndpoint := "wss://" + kubeAddr + "/api/v1/teleport/join/" + meta.GetID()
