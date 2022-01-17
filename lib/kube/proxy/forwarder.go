@@ -807,6 +807,7 @@ func (f *Forwarder) join(ctx *authContext, w http.ResponseWriter, req *http.Requ
 	return nil, nil
 }
 
+// remoteJoin forwards a join request to a remote cluster.
 func (f *Forwarder) remoteJoin(ctx *authContext, w http.ResponseWriter, req *http.Request, p httprouter.Params, sess *clusterSession) (resp interface{}, err error) {
 	f.log.Error("TRIGGERING REMOTE JOIN WITH URL: %v", req.URL.String())
 
@@ -839,6 +840,8 @@ func (f *Forwarder) remoteJoin(ctx *authContext, w http.ResponseWriter, req *htt
 	return nil, nil
 }
 
+// wsProxy proxies a websocket connection between two clusters transparently to allow for
+// remote joins.
 func wsProxy(wsSource *websocket.Conn, wsTarget *websocket.Conn) error {
 	closeM := make(chan struct{})
 	errS := make(chan error)
@@ -1266,6 +1269,7 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 	return nil, nil
 }
 
+// remoteExec forwards an exec request to a remote cluster.
 func (f *Forwarder) remoteExec(ctx *authContext, w http.ResponseWriter, req *http.Request, p httprouter.Params, sess *clusterSession, request remoteCommandRequest, proxy *remoteCommandProxy) (resp interface{}, err error) {
 	defer proxy.Close()
 

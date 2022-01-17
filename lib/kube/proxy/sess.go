@@ -50,6 +50,7 @@ import (
 const PresenceVerifyInterval = time.Second * 15
 const PresenceMaxDifference = time.Minute
 
+// remoteClient is either a kubectl or websocket client.
 type remoteClient interface {
 	stdinStream() io.Reader
 	stdoutStream() io.Writer
@@ -166,6 +167,7 @@ func (p *kubeProxyClientStreams) Close() error {
 	return trace.Wrap(p.proxy.Close())
 }
 
+// multiResizeQueue is a merged queue of multiple terminal size queues.
 type multiResizeQueue struct {
 	queues   map[string]chan *remotecommand.TerminalSize
 	cases    []reflect.SelectCase
@@ -209,6 +211,7 @@ func (r *multiResizeQueue) Next() *remotecommand.TerminalSize {
 	return size
 }
 
+// party represents one participant of the session and their associated state.
 type party struct {
 	Ctx       authContext
 	Id        uuid.UUID
@@ -218,6 +221,7 @@ type party struct {
 	closeOnce sync.Once
 }
 
+// newParty creates a new party.
 func newParty(ctx authContext, mode types.SessionParticipantMode, client remoteClient) *party {
 	return &party{
 		Ctx:    ctx,
@@ -228,6 +232,7 @@ func newParty(ctx authContext, mode types.SessionParticipantMode, client remoteC
 	}
 }
 
+// Close closes the party and disconnects the remote end.
 func (p *party) Close() error {
 	var err error
 
@@ -239,9 +244,11 @@ func (p *party) Close() error {
 	return trace.Wrap(err)
 }
 
+// session represents an ongoing k8s session.
 type session struct {
 	mu sync.RWMutex
 
+	// ctx is the auth context of the session initiator
 	ctx authContext
 
 	forwarder *Forwarder
@@ -252,8 +259,11 @@ type session struct {
 
 	id uuid.UUID
 
+	// parties is a map of currently active parties.
 	parties map[uuid.UUID]*party
 
+	// partiesHistorical is a map of all current previous parties.
+	// This is used for audit trails.
 	partiesHistorical map[uuid.UUID]*party
 
 	log *log.Entry
@@ -268,6 +278,7 @@ type session struct {
 
 	state types.SessionState
 
+	// stateUpdate is used to broadcast state updates to listers.
 	stateUpdate broadcast.Broadcaster
 
 	accessEvaluator auth.SessionAccessEvaluator
@@ -276,6 +287,7 @@ type session struct {
 
 	emitter apievents.Emitter
 
+	// tty is set if the session is using a TTY.
 	tty bool
 
 	podName string
@@ -286,15 +298,18 @@ type session struct {
 
 	expires time.Time
 
+	// sess is the clusterSession used to establish this session.
 	sess *clusterSession
 
 	closeC chan struct{}
 
 	closeOnce sync.Once
 
+	// PresenceEnabled is set to true if MFA based presence is required.
 	PresenceEnabled bool
 }
 
+// newSession creates a new session in pending mode.
 func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params httprouter.Params, initiator *party, sess *clusterSession) (*session, error) {
 	id := uuid.New()
 	log := forwarder.log.WithField("session", id.String())
@@ -347,6 +362,8 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 	return s, nil
 }
 
+// waitOnAccess puts the session in pending mode and waits for the session
+// to fulfill the access requirements again.
 func (s *session) waitOnAccess() {
 	s.clients_stdin.Off()
 	s.clients_stdout.W.Off()
@@ -377,6 +394,8 @@ outer:
 	s.clients_stderr.On()
 }
 
+// checkPresence checks the presence timestamp of involved moderators
+// and kicks them if they are not active.
 func (s *session) checkPresence() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -404,6 +423,8 @@ func (s *session) checkPresence() error {
 	return nil
 }
 
+// launch waits until the session meets access requirements and then transitions the session
+// to a running state.
 func (s *session) launch() error {
 	defer func() {
 		err := s.Close()
@@ -781,6 +802,7 @@ func (s *session) launch() error {
 	return nil
 }
 
+// join attempts to connect a party to the session.
 func (s *session) join(p *party) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -842,27 +864,22 @@ func (s *session) join(p *party) error {
 	s.clients_stdout.BroadcastMessage(fmt.Sprintf("User %v joined the session.", p.Ctx.User.GetName()))
 
 	if s.tty {
-		s.log.Debug("adding resize stream")
 		s.terminalSizeQueue.add(stringId, p.Client.resizeQueue())
 	}
 
 	if s.tty && p.Ctx.User.GetName() == s.ctx.User.GetName() {
-		s.log.Debug("party is host, adding stdin stream")
 		s.clients_stdin.R.R.(*srv.MultiReader).AddReader(stringId, p.Client.stdinStream())
 	}
 
-	s.log.Debug("replaying recent writes to stdout")
 	recentWrites := s.clients_stdout.W.W.W.(*srv.MultiWriter).GetRecentWrites()
 	err = utils.WriteAll(p.Client.stdoutStream().Write, recentWrites)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	s.log.Debug("adding stdout stream")
 	stdout := kubeutils.WriterCloserWrapper{Writer: p.Client.stdoutStream()}
 	s.clients_stdout.W.W.W.(*srv.MultiWriter).AddWriter(stringId, stdout, false)
 
-	s.log.Debug("adding stderr stream")
 	stderr := kubeutils.WriterCloserWrapper{Writer: p.Client.stderrStream()}
 	s.clients_stderr.W.W.(*srv.MultiWriter).AddWriter(stringId, stderr, false)
 
@@ -916,6 +933,7 @@ func (s *session) join(p *party) error {
 	return nil
 }
 
+// leave removes a party from the session.
 func (s *session) leave(id uuid.UUID) error {
 	if s.state == types.SessionState_SessionStateTerminated {
 		return nil
@@ -1004,6 +1022,7 @@ func (s *session) leave(id uuid.UUID) error {
 	return nil
 }
 
+// allParticipants returns a list of all historical participants of the session.
 func (s *session) allParticipants() []string {
 	var participants []string
 	for _, p := range s.partiesHistorical {
@@ -1013,6 +1032,7 @@ func (s *session) allParticipants() []string {
 	return participants
 }
 
+// canStart checks if a session can start with the current set of participants.
 func (s *session) canStart() (bool, auth.PolicyOptions, error) {
 	var participants []auth.SessionAccessContext
 	for _, party := range s.parties {
@@ -1033,6 +1053,7 @@ func (s *session) canStart() (bool, auth.PolicyOptions, error) {
 	return yes, options, trace.Wrap(err)
 }
 
+// Close terminates a session and disconnects all participants.
 func (s *session) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1091,7 +1112,6 @@ func (s *session) trackerGet() (types.SessionTracker, error) {
 }
 
 func (s *session) trackerCreate(p *party) error {
-	s.log.Debug("Creating tracker")
 	initator := &types.Participant{
 		ID:         p.Id.String(),
 		User:       p.Ctx.User.GetName(),

@@ -36,6 +36,8 @@ func safeSend(ch chan bool, value bool) (closed bool) {
 	return false
 }
 
+// BreakReader implements a reader wrapper that allows the connection
+// to be temporarily paused at any moment.
 type BreakReader struct {
 	remaining []byte
 	cond      *sync.Cond
@@ -45,6 +47,7 @@ type BreakReader struct {
 	closed    *int32
 }
 
+// NewBreakReader crates a new BreakReader from an underlying tracking reader.
 func NewBreakReader(r *utils.TrackingReader) *BreakReader {
 	data := make(chan []byte)
 	closedVal := int32(0)
@@ -76,6 +79,7 @@ func NewBreakReader(r *utils.TrackingReader) *BreakReader {
 	}
 }
 
+// On allows data to flow through the reader.
 func (r *BreakReader) On() {
 	r.cond.L.Lock()
 	defer r.cond.L.Unlock()
@@ -83,6 +87,7 @@ func (r *BreakReader) On() {
 	r.cond.Broadcast()
 }
 
+// Off restricts data from flowing through the reader.
 func (r *BreakReader) Off() {
 	r.cond.L.Lock()
 	defer r.cond.L.Unlock()
@@ -131,10 +136,13 @@ func (r *BreakReader) Read(p []byte) (int, error) {
 	}
 }
 
+// Close closes the reader and stops the dataflow but does not close the underlying reader.
 func (r *BreakReader) Close() {
 	atomic.StoreInt32(r.closed, 1)
 }
 
+// SwitchWriter implements a writer wrapper that allows the stream to be temporarily paused at any moment.
+// It also allows unconditional writes to allow for message broadcasts.
 type SwitchWriter struct {
 	mu     sync.Mutex
 	W      *utils.TrackingWriter
@@ -142,6 +150,7 @@ type SwitchWriter struct {
 	on     bool
 }
 
+// NewSwitchWriter creates a new SwitchWriter from an underlying tracking writer.
 func NewSwitchWriter(w *utils.TrackingWriter) *SwitchWriter {
 	return &SwitchWriter{
 		W:  w,
@@ -149,6 +158,7 @@ func NewSwitchWriter(w *utils.TrackingWriter) *SwitchWriter {
 	}
 }
 
+// On allows data to flow through the writer.
 func (w *SwitchWriter) On() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -156,6 +166,7 @@ func (w *SwitchWriter) On() error {
 	return trace.Wrap(utils.WriteAll(w.W.Write, w.buffer))
 }
 
+// Off buffers incoming writes until the writer is turned on again.
 func (w *SwitchWriter) Off() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -174,6 +185,7 @@ func (w *SwitchWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// WriteUnconditional allows unconditional writes to the underlying writer.
 func (w *SwitchWriter) WriteUnconditional(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
