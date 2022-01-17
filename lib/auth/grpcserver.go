@@ -1652,71 +1652,58 @@ func (g *GRPCServer) DeleteRole(ctx context.Context, req *proto.DeleteRoleReques
 
 // MaintainSessionPresence establishes a channel used to continously verify the presence for a session.
 func (g *GRPCServer) MaintainSessionPresence(stream proto.AuthService_MaintainSessionPresenceServer) error {
-	log.Error("got stream")
 	ctx := stream.Context()
 	actx, err := g.authenticate(ctx)
-	log.Error("authed stream")
 	if err != nil {
-		log.Errorf("Failed handle mfa: %v.", err)
 		return trace.Wrap(err)
 	}
 
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			log.Errorf("Failed handle mfa: %v.", err)
 			return trace.Wrap(err)
 		}
 
 		challengeReq := req.GetChallengeRequest()
 		if challengeReq == nil {
-			log.Errorf("bad type")
 			return trace.BadParameter("expected PresenceMFAChallengeRequest, got %T", req)
 		}
 
 		user := actx.User.GetName()
 		u2fStorage, err := u2f.InMemoryAuthenticationStorage(actx.authServer.Identity)
 		if err != nil {
-			log.Errorf("Failed handle mfa: %v.", err)
 			return trace.Wrap(err)
 		}
 
 		authChallenge, err := actx.authServer.mfaAuthChallenge(ctx, user, u2fStorage)
 		if err != nil {
-			log.Errorf("Failed handle mfa: %v.", err)
 			return trace.Wrap(err)
 		}
 
 		if len(authChallenge.U2F) == 0 && authChallenge.WebauthnChallenge == nil {
-			log.Errorf("no u2f or webauthn challenges")
 			return trace.BadParameter("no U2F or WebAuthn devices registered for %q", user)
 		}
 
 		if err := stream.Send(authChallenge); err != nil {
-			log.Errorf("Failed handle mfa: %v.", err)
 			return trace.Wrap(err)
 		}
 
 		resp, err := stream.Recv()
 		if err != nil {
-			log.Errorf("Failed handle mfa: %v.", err)
 			return trace.Wrap(err)
 		}
 
 		challengeResp := resp.GetChallengeResponse()
 		if challengeReq == nil {
-			log.Errorf("bad response")
 			return trace.BadParameter("expected MFAAuthenticateResponse, got %T", req)
 		}
 
 		if _, err := actx.authServer.validateMFAAuthResponse(ctx, user, challengeResp, u2fStorage); err != nil {
-			log.Errorf("Failed handle mfa: %v.", err)
 			return trace.Wrap(err)
 		}
 
 		err = actx.authServer.UpdatePresence(ctx, challengeReq.SessionID, user)
 		if err != nil {
-			log.Errorf("Failed handle mfa: %v.", err)
 			return trace.Wrap(err)
 		}
 	}
