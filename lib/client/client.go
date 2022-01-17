@@ -73,6 +73,7 @@ type NodeClient struct {
 	OnMFA     func()
 }
 
+// GetActiveSessions returns a list of active session trackers.
 func (proxy *ProxyClient) GetActiveSessions(ctx context.Context) ([]types.SessionTracker, error) {
 	auth, err := proxy.ConnectToCurrentCluster(ctx, false)
 	if err != nil {

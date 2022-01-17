@@ -2924,18 +2924,22 @@ func (a *Server) GetApp(ctx context.Context, name string) (types.Application, er
 	return a.GetCache().GetApp(ctx, name)
 }
 
+// CreateSessionTracker creates a tracker resource for an active session.
 func (a *Server) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
 	return a.SessionTrackerService.CreateSessionTracker(ctx, req)
 }
 
+// GetActiveSessionTrackers returns a list of active session trackers.
 func (a *Server) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
 	return a.SessionTrackerService.GetActiveSessionTrackers(ctx)
 }
 
+// RemoveSessionTracker removes a tracker resource for an active session.
 func (a *Server) RemoveSessionTracker(ctx context.Context, sessionID string) error {
 	return a.SessionTrackerService.RemoveSessionTracker(ctx, sessionID)
 }
 
+// UpdateSessionTracker updates a tracker resource for an active session.
 func (a *Server) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
 	return a.SessionTrackerService.UpdateSessionTracker(ctx, req)
 }

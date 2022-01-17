@@ -1650,6 +1650,7 @@ func (g *GRPCServer) DeleteRole(ctx context.Context, req *proto.DeleteRoleReques
 	return &empty.Empty{}, nil
 }
 
+// MaintainSessionPresence establishes a channel used to continously verify the presence for a session.
 func (g *GRPCServer) MaintainSessionPresence(stream proto.AuthService_MaintainSessionPresenceServer) error {
 	log.Error("got stream")
 	ctx := stream.Context()
@@ -3592,6 +3593,7 @@ func (g *GRPCServer) ListResources(ctx context.Context, req *proto.ListResources
 	return resp, nil
 }
 
+// CreateSession creates a tracker resource for an active session.
 func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSessionRequest) (*types.SessionTrackerV1, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
@@ -3610,6 +3612,7 @@ func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSession
 	return defined, nil
 }
 
+// GetSession returns the current state of a session tracker for an active session.
 func (g *GRPCServer) GetSession(ctx context.Context, req *proto.GetSessionRequest) (*types.SessionTrackerV1, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
@@ -3628,6 +3631,7 @@ func (g *GRPCServer) GetSession(ctx context.Context, req *proto.GetSessionReques
 	return defined, nil
 }
 
+// GetActiveSessions returns a list of active session trackers.
 func (g *GRPCServer) GetActiveSessions(ctx context.Context, req *empty.Empty) (*proto.GetActiveSessionsResponse, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
@@ -3651,6 +3655,7 @@ func (g *GRPCServer) GetActiveSessions(ctx context.Context, req *empty.Empty) (*
 	return &proto.GetActiveSessionsResponse{Sessions: definedArr}, nil
 }
 
+// RemoveSession removes a tracker resource for an active session.
 func (g *GRPCServer) RemoveSession(ctx context.Context, req *proto.RemoveSessionRequest) (*empty.Empty, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
@@ -3663,6 +3668,7 @@ func (g *GRPCServer) RemoveSession(ctx context.Context, req *proto.RemoveSession
 	return &empty.Empty{}, nil
 }
 
+// UpdateSession updates a tracker resource for an active session.
 func (g *GRPCServer) UpdateSession(ctx context.Context, req *proto.UpdateSessionRequest) (*empty.Empty, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {

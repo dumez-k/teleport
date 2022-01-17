@@ -37,11 +37,22 @@ const (
 // SessionTrackerService is a realtime session service that has information about
 // sessions that are in-flight in the cluster at the moment.
 type SessionTrackerService interface {
+	// GetActiveSessionTrackers returns a list of active session trackers.
 	GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error)
+
+	// GetSessionTracker returns the current state of a session tracker for an active session.
 	GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error)
+
+	// CreateSessionTracker creates a tracker resource for an active session.
 	CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error)
+
+	// UpdateSessionTracker updates a tracker resource for an active session.
 	UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error
+
+	// RemoveSessionTracker removes a tracker resource for an active session.
 	RemoveSessionTracker(ctx context.Context, sessionID string) error
+
+	// UpdatePresence updates the presence status of a user in a session.
 	UpdatePresence(ctx context.Context, sessionID, user string) error
 }
 
@@ -91,6 +102,7 @@ func (s *sessionV2) loadSession(ctx context.Context, sessionID string) (types.Se
 	return session, nil
 }
 
+// UpdatePresence updates the presence status of a user in a session.
 func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) error {
 	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionID))
 	if err != nil {
@@ -119,6 +131,7 @@ func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) 
 	}
 }
 
+// GetSessionTracker returns the current state of a session tracker for an active session.
 func (s *sessionV2) GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error) {
 	session, err := s.loadSession(ctx, sessionID)
 	if err != nil {
@@ -128,6 +141,7 @@ func (s *sessionV2) GetSessionTracker(ctx context.Context, sessionID string) (ty
 	return session, nil
 }
 
+// GetActiveSessionTrackers returns a list of active session trackers.
 func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
 	sessionList, err := s.getSessionList(ctx)
 	if err != nil {
@@ -147,6 +161,7 @@ func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.Sessi
 	return sessions, nil
 }
 
+// CreateSessionTracker creates a tracker resource for an active session.
 func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
 	now := time.Now().UTC()
 
@@ -192,6 +207,7 @@ func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateS
 	return session, nil
 }
 
+// UpdateSessionTracker updates a tracker resource for an active session.
 func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
 	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, req.SessionID))
 	if err != nil {
@@ -231,6 +247,7 @@ func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateS
 	}
 }
 
+// RemoveSessionTracker removes a tracker resource for an active session.
 func (s *sessionV2) RemoveSessionTracker(ctx context.Context, sessionID string) error {
 	err := s.removeSessionFromList(ctx, sessionID)
 	if err != nil {

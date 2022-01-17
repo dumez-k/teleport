@@ -2399,17 +2399,20 @@ func (c *Client) GetResources(ctx context.Context, namespace, resourceType strin
 	return resources, nil
 }
 
+// CreateSessionTracker creates a tracker resource for an active session.
 func (c *Client) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
 	resp, err := c.grpc.CreateSession(ctx, req)
 	return resp, trail.FromGRPC(err)
 }
 
+// GetSessionTracker returns the current state of a session tracker for an active session.
 func (c *Client) GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error) {
 	req := &proto.GetSessionRequest{SessionID: sessionID}
 	resp, err := c.grpc.GetSession(ctx, req)
 	return resp, trail.FromGRPC(err)
 }
 
+// GetActiveSessionTrackers returns a list of active session trackers.
 func (c *Client) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
 	resp, err := c.grpc.GetActiveSessions(ctx, &empty.Empty{})
 	if err != nil {
@@ -2424,16 +2427,19 @@ func (c *Client) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionT
 	return sessions, nil
 }
 
+// RemoveSessionTracker removes a tracker resource for an active session.
 func (c *Client) RemoveSessionTracker(ctx context.Context, sessionID string) error {
 	_, err := c.grpc.RemoveSession(ctx, &proto.RemoveSessionRequest{SessionID: sessionID})
 	return trail.FromGRPC(err)
 }
 
+// UpdateSessionTracker updates a tracker resource for an active session.
 func (c *Client) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
 	_, err := c.grpc.UpdateSession(ctx, req)
 	return trail.FromGRPC(err)
 }
 
+// MaintainSessionPresence establishes a channel used to continously verify the presence for a session.
 func (c *Client) MaintainSessionPresence(ctx context.Context) (proto.AuthService_MaintainSessionPresenceClient, error) {
 	stream, err := c.grpc.MaintainSessionPresence(ctx)
 	return stream, trail.FromGRPC(err)
