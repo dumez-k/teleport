@@ -19,9 +19,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
-	"os"
-	"os/exec"
+	"net/url"
+
 	"strings"
 	"time"
 
@@ -47,13 +48,28 @@ import (
 =======
 	"github.com/gravitational/teleport/lib/srv/alpnproxy"
 
+	dockerterm "github.com/moby/term"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/resource"
+	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/pkg/apis/clientauthentication"
 	clientauthv1beta1 "k8s.io/client-go/pkg/apis/clientauthentication/v1beta1"
+<<<<<<< HEAD
 >>>>>>> fcdc68a2e (mfa solver impl)
+=======
+	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubectl/pkg/cmd/util/podcmd"
+	"k8s.io/kubectl/pkg/polymorphichelpers"
+	"k8s.io/kubectl/pkg/scheme"
+	"k8s.io/kubectl/pkg/util/interrupt"
+	"k8s.io/kubectl/pkg/util/term"
+>>>>>>> bfac48801 (add bulk of client)
 )
 
 type kubeCommands struct {
@@ -213,6 +229,202 @@ func kubeExecCommandAssembler(c *kubeExecCommand) []string {
 	return cmd
 }
 
+// RemoteExecutor defines the interface accepted by the Exec command - provided for test stubbing
+type RemoteExecutor interface {
+	Execute(method string, url *url.URL, config *restclient.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool, terminalSizeQueue remotecommand.TerminalSizeQueue) error
+}
+
+// DefaultRemoteExecutor is the standard implementation of remote command execution
+type DefaultRemoteExecutor struct{}
+
+func (*DefaultRemoteExecutor) Execute(method string, url *url.URL, config *restclient.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool, terminalSizeQueue remotecommand.TerminalSizeQueue) error {
+	exec, err := remotecommand.NewSPDYExecutor(config, method, url)
+	if err != nil {
+		return err
+	}
+	return exec.Stream(remotecommand.StreamOptions{
+		Stdin:             stdin,
+		Stdout:            stdout,
+		Stderr:            stderr,
+		Tty:               tty,
+		TerminalSizeQueue: terminalSizeQueue,
+	})
+}
+
+type StreamOptions struct {
+	Namespace     string
+	PodName       string
+	ContainerName string
+	Stdin         bool
+	TTY           bool
+	// minimize unnecessary output
+	Quiet bool
+	// InterruptParent, if set, is used to handle interrupts while attached
+	InterruptParent *interrupt.Handler
+
+	genericclioptions.IOStreams
+
+	overrideStreams func() (io.ReadCloser, io.Writer, io.Writer)
+	isTerminalIn    func(t term.TTY) bool
+}
+
+func (o *StreamOptions) SetupTTY() term.TTY {
+	t := term.TTY{
+		Parent: o.InterruptParent,
+		Out:    o.Out,
+	}
+
+	if !o.Stdin {
+		// need to nil out o.In to make sure we don't create a stream for stdin
+		o.In = nil
+		o.TTY = false
+		return t
+	}
+
+	t.In = o.In
+	if !o.TTY {
+		return t
+	}
+
+	if o.isTerminalIn == nil {
+		o.isTerminalIn = func(tty term.TTY) bool {
+			return tty.IsTerminalIn()
+		}
+	}
+	if !o.isTerminalIn(t) {
+		o.TTY = false
+
+		if !o.Quiet && o.ErrOut != nil {
+			fmt.Fprintln(o.ErrOut, "Unable to use a TTY - input is not a terminal or the right kind of file")
+		}
+
+		return t
+	}
+
+	// if we get to here, the user wants to attach stdin, wants a TTY, and o.In is a terminal, so we
+	// can safely set t.Raw to true
+	t.Raw = true
+
+	if o.overrideStreams == nil {
+		// use dockerterm.StdStreams() to get the right I/O handles on Windows
+		o.overrideStreams = dockerterm.StdStreams
+	}
+	stdin, stdout, _ := o.overrideStreams()
+	o.In = stdin
+	t.In = stdin
+	if o.Out != nil {
+		o.Out = stdout
+		t.Out = stdout
+	}
+
+	return t
+}
+
+type ExecOptions struct {
+	StreamOptions
+	resource.FilenameOptions
+
+	ResourceName     string
+	Command          []string
+	EnforceNamespace bool
+
+	Builder          func() *resource.Builder
+	ExecutablePodFn  polymorphichelpers.AttachablePodForObjectFunc
+	restClientGetter genericclioptions.RESTClientGetter
+
+	Pod           *corev1.Pod
+	Executor      RemoteExecutor
+	PodClient     coreclient.PodsGetter
+	GetPodTimeout time.Duration
+	Config        *restclient.Config
+}
+
+// Run executes a validated remote execution against a pod.
+func (p *ExecOptions) Run() error {
+	var err error
+	if len(p.PodName) != 0 {
+		p.Pod, err = p.PodClient.Pods(p.Namespace).Get(context.TODO(), p.PodName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+	} else {
+		builder := p.Builder().
+			WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
+			FilenameParam(p.EnforceNamespace, &p.FilenameOptions).
+			NamespaceParam(p.Namespace).DefaultNamespace()
+		if len(p.ResourceName) > 0 {
+			builder = builder.ResourceNames("pods", p.ResourceName)
+		}
+
+		obj, err := builder.Do().Object()
+		if err != nil {
+			return err
+		}
+
+		p.Pod, err = p.ExecutablePodFn(p.restClientGetter, obj, p.GetPodTimeout)
+		if err != nil {
+			return err
+		}
+	}
+
+	pod := p.Pod
+
+	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		return fmt.Errorf("cannot exec into a container in a completed pod; current phase is %s", pod.Status.Phase)
+	}
+
+	containerName := p.ContainerName
+	if len(containerName) == 0 {
+		container, err := podcmd.FindOrDefaultContainerByName(pod, containerName, p.Quiet, p.ErrOut)
+		if err != nil {
+			return err
+		}
+		containerName = container.Name
+	}
+
+	// ensure we can recover the terminal while attached
+	t := p.SetupTTY()
+
+	var sizeQueue remotecommand.TerminalSizeQueue
+	if t.Raw {
+		// this call spawns a goroutine to monitor/update the terminal size
+		sizeQueue = t.MonitorSize(t.GetSize())
+
+		// unset p.Err if it was previously set because both stdout and stderr go over p.Out when tty is
+		// true
+		p.ErrOut = nil
+	}
+
+	fn := func() error {
+		restClient, err := restclient.RESTClientFor(p.Config)
+		if err != nil {
+			return err
+		}
+
+		req := restClient.Post().
+			Resource("pods").
+			Name(pod.Name).
+			Namespace(pod.Namespace).
+			SubResource("exec")
+		req.VersionedParams(&corev1.PodExecOptions{
+			Container: containerName,
+			Command:   p.Command,
+			Stdin:     p.Stdin,
+			Stdout:    p.Out != nil,
+			Stderr:    p.ErrOut != nil,
+			TTY:       t.Raw,
+		}, scheme.ParameterCodec)
+
+		return p.Executor.Execute("POST", req.URL(), p.Config, p.In, p.Out, p.ErrOut, t.Raw, sizeQueue)
+	}
+
+	if err := t.Safe(fn); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 type kubeExecCommand struct {
 	*kingpin.CmdClause
 	target    string
@@ -244,12 +456,8 @@ func newKubeExecCommand(parent *kingpin.CmdClause) *kubeExecCommand {
 }
 
 func (c *kubeExecCommand) run(cf *CLIConf) error {
-	cmdStrings := kubeExecCommandAssembler(c)
-	cmd := exec.Command(cmdStrings[0], cmdStrings[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return trace.Wrap(cmd.Run())
+	var options ExecOptions
+	return trace.Wrap(options.Run())
 }
 
 type kubeSessionsCommand struct {
