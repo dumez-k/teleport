@@ -25,12 +25,21 @@ import (
 	"github.com/vulcand/predicate"
 )
 
+// SessionAccessEvaluator takes a set of policies
+// and uses rules to evaluate them to determine when a session may start
+// and if a user can join a session.
+//
+// The current implementation is very simple and uses a brute-force algorithm.
+// More efficient implementations that run in non O(n^2)-ish time a possible but require significant complexity.
+// In the real world, the number of roles and session are small enough that this doesn't have a meaningful impact.
 type SessionAccessEvaluator struct {
 	kind     types.SessionKind
 	requires []*types.SessionRequirePolicy
 	roles    []types.Role
 }
 
+// NewSessionAccessEvaluator creates a new session access evaluator for a given session kind
+// and a set of roles attached to the host user.
 func NewSessionAccessEvaluator(roles []types.Role, kind types.SessionKind) SessionAccessEvaluator {
 	requires := getRequirePolicies(roles)
 
@@ -76,6 +85,7 @@ func contains(s []string, e types.SessionKind) bool {
 	return false
 }
 
+// SessionAccessContext is the context that must be provided per participant in the session.
 type SessionAccessContext struct {
 	Roles []types.Role
 }
@@ -141,6 +151,7 @@ func (e *SessionAccessEvaluator) matchesJoin(allow *types.SessionJoinPolicy) boo
 	return false
 }
 
+// CanJoin checks if a given user is eligible to join a session.
 func (e *SessionAccessEvaluator) CanJoin(user SessionAccessContext) []types.SessionParticipantMode {
 	var modes []types.SessionParticipantMode
 
@@ -167,10 +178,12 @@ func SliceContainsMode(s []types.SessionParticipantMode, e types.SessionParticip
 	return false
 }
 
+// PolicyOptions is a set of settings for the session determined by the matched require policy.
 type PolicyOptions struct {
 	TerminateOnLeave bool
 }
 
+// FulfilledFor checks if a given session may run with a list of participants.
 func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContext) (bool, PolicyOptions, error) {
 	if len(e.requires) == 0 {
 		return true, PolicyOptions{}, nil

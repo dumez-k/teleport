@@ -1625,18 +1625,37 @@ message RoleConditions {
         [ (gogoproto.jsontag) = "join_sessions,omitempty" ];
 }
 
+// SessionRequirePolicy a requirement policy that needs to be fulfilled to grant access.
 message SessionRequirePolicy {
+    // Name is the name of the policy.
     string Name = 1 [ (gogoproto.jsontag) = "name" ];
+
+    // Filter is a predicate that determines what users count towards this policy.
     string Filter = 2 [ (gogoproto.jsontag) = "filter" ];
+
+    // Kinds are the session kinds this policy applies to.
     repeated string Kinds = 3 [ (gogoproto.jsontag) = "kinds" ];
+
+    // Count is the amount of people that need to be matched for this policy to be fulfilled.
     int32 Count = 4 [ (gogoproto.jsontag) = "count" ];
+
+    // OnLeave is the behaviour that's used when the policy is no longer fulfilled
+    // for a live session.
     string OnLeave = 5 [ (gogoproto.jsontag) = "on_leave" ];
 }
 
+// SessionJoinPolicy defines a policy that allows a user to join sessions.
 message SessionJoinPolicy {
+    // Name is the name of the policy.
     string Name = 1 [ (gogoproto.jsontag) = "name" ];
+
+    // Roles is a list of roles that you can join the session of.
     repeated string Roles = 2 [ (gogoproto.jsontag) = "roles" ];
+
+    // Kinds are the session kinds this policy applies to.
     repeated string Kinds = 3 [ (gogoproto.jsontag) = "kinds" ];
+
+    // Modes is a list of permitted participant modes for this policy.
     repeated string Modes = 4 [ (gogoproto.jsontag) = "modes" ];
 }
 

@@ -1526,7 +1526,8 @@ message PresenceMFAChallengeSend {
 
 // AuthService is authentication/authorization service implementation
 service AuthService {
-    // MaintainSessionPresence establishes a channel used to continously verify the presence for a session.
+    // MaintainSessionPresence establishes a channel used to continously verify the presence for a
+    // session.
     rpc MaintainSessionPresence(stream PresenceMFAChallengeSend)
         returns (stream MFAAuthenticateChallenge);
 

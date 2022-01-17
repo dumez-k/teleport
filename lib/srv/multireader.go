@@ -23,12 +23,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// MultiReader is a wrapper around io.MultiReader which allows to add and remove readers
 type MultiReader struct {
 	sync.RWMutex
 	readers map[string]io.Reader
 	multi   io.Reader
 }
 
+// NewMultiReader creates a new multitreader.
 func NewMultiReader() *MultiReader {
 	return &MultiReader{
 		readers: make(map[string]io.Reader),
@@ -36,6 +38,7 @@ func NewMultiReader() *MultiReader {
 	}
 }
 
+// Read reads from any of the underlying readers.
 func (r *MultiReader) Read(p []byte) (int, error) {
 	r.RLock()
 	multi := r.multi
@@ -49,6 +52,7 @@ func (r *MultiReader) Read(p []byte) (int, error) {
 	return read, nil
 }
 
+// AddReader adds the reader.
 func (r *MultiReader) AddReader(name string, reader io.Reader) {
 	r.Lock()
 	defer r.Unlock()
@@ -62,6 +66,7 @@ func (r *MultiReader) AddReader(name string, reader io.Reader) {
 	r.multi = io.MultiReader(readers...)
 }
 
+// RemoveReader removes a reader.
 func (r *MultiReader) RemoveReader(name string) {
 	r.Lock()
 	defer r.Unlock()

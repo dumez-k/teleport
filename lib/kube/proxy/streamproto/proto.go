@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// metaMessage is a control message containing one or more payloads.
 type metaMessage struct {
 	Resize          *remotecommand.TerminalSize `json:"resize,omitempty"`
 	ForceTerminate  bool                        `json:"force_terminate,omitempty"`
@@ -35,19 +36,31 @@ type metaMessage struct {
 	ServerHandshake *ServerHandshake            `json:"server_handshake,omitempty"`
 }
 
+// ClientHandshake is the first message sent by a client to inform a server of it's intentions.
 type ClientHandshake struct {
 	Mode types.SessionParticipantMode `json:"mode"`
 }
 
+// ServerHandshake is the first message sent by a server to inform a client of the session settings.
 type ServerHandshake struct {
 	MFARequired bool `json:"mfa_required"`
 }
 
+// SessionStream represents one end of the bidirectional session connection.
 type SessionStream struct {
-	conn           *websocket.Conn
-	in             chan []byte
-	currentIn      []byte
-	resizeQueue    chan *remotecommand.TerminalSize
+	// The underlying websocket connection.
+	conn *websocket.Conn
+
+	// A stream of incoming session packets.
+	in chan []byte
+
+	// Optionally contains a partially read session packet.
+	currentIn []byte
+
+	// A list of resize requests.
+	resizeQueue chan *remotecommand.TerminalSize
+
+	// A notification channel for force termination requests.
 	forceTerminate chan struct{}
 	writeSync      sync.Mutex
 	CloseC         chan struct{}
@@ -57,6 +70,8 @@ type SessionStream struct {
 	Mode           types.SessionParticipantMode
 }
 
+// NewSessionStream creates a new session stream.
+// The type of the handshake parameter determines if this is the client or server end.
 func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStream, error) {
 	s := &SessionStream{
 		conn:           conn,
@@ -196,6 +211,7 @@ func (s *SessionStream) Write(data []byte) (int, error) {
 	return len(data), s.conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
+// Resize sends a resize request to the other party.
 func (s *SessionStream) Resize(size *remotecommand.TerminalSize) error {
 	msg := metaMessage{Resize: size}
 	json, err := utils.FastMarshal(msg)
@@ -209,14 +225,17 @@ func (s *SessionStream) Resize(size *remotecommand.TerminalSize) error {
 	return trace.Wrap(s.conn.WriteMessage(websocket.TextMessage, json))
 }
 
+// ResizeQueue returns a channel that will receive resize requests.
 func (s *SessionStream) ResizeQueue() chan *remotecommand.TerminalSize {
 	return s.resizeQueue
 }
 
+// ForceTerminate returns the channel used for force termination requests.
 func (s *SessionStream) ForceTerminate() chan struct{} {
 	return s.forceTerminate
 }
 
+// DoForceTerminate sends a force termination request to the other end.
 func (s *SessionStream) DoForceTerminate() error {
 	msg := metaMessage{ForceTerminate: true}
 	json, err := utils.FastMarshal(msg)
@@ -230,10 +249,12 @@ func (s *SessionStream) DoForceTerminate() error {
 	return trace.Wrap(s.conn.WriteMessage(websocket.TextMessage, json))
 }
 
+// WaitOnClose waits until the other end closes the stream.
 func (s *SessionStream) WaitOnClose() {
 	<-s.CloseC
 }
 
+// Close closes the stream.
 func (s *SessionStream) Close() error {
 	if !s.closed {
 		s.conn.WriteMessage(websocket.CloseMessage, []byte{})

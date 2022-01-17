@@ -15950,6 +15950,8 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type AuthServiceClient interface {
+	// MaintainSessionPresence establishes a channel used to continously verify the presence for a
+	// session.
 	MaintainSessionPresence(ctx context.Context, opts ...grpc.CallOption) (AuthService_MaintainSessionPresenceClient, error)
 	// CreateSession creates a new session resource.
 	CreateSession(ctx context.Context, in *CreateSessionRequest, opts ...grpc.CallOption) (*types.SessionTrackerV1, error)
@@ -18031,6 +18033,8 @@ func (c *authServiceClient) ListResources(ctx context.Context, in *ListResources
 
 // AuthServiceServer is the server API for AuthService service.
 type AuthServiceServer interface {
+	// MaintainSessionPresence establishes a channel used to continously verify the presence for a
+	// session.
 	MaintainSessionPresence(AuthService_MaintainSessionPresenceServer) error
 	// CreateSession creates a new session resource.
 	CreateSession(context.Context, *CreateSessionRequest) (*types.SessionTrackerV1, error)

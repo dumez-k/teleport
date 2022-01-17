@@ -4390,11 +4390,18 @@ func (m *RoleConditions) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RoleConditions proto.InternalMessageInfo
 
+// SessionRequirePolicy a requirement policy that needs to be fulfilled to grant access.
 type SessionRequirePolicy struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=Name,proto3" json:"name"`
-	Filter               string   `protobuf:"bytes,2,opt,name=Filter,proto3" json:"filter"`
-	Kinds                []string `protobuf:"bytes,3,rep,name=Kinds,proto3" json:"kinds"`
-	Count                int32    `protobuf:"varint,4,opt,name=Count,proto3" json:"count"`
+	// Name is the name of the policy.
+	Name string `protobuf:"bytes,1,opt,name=Name,proto3" json:"name"`
+	// Filter is a predicate that determines what users count towards this policy.
+	Filter string `protobuf:"bytes,2,opt,name=Filter,proto3" json:"filter"`
+	// Kinds are the session kinds this policy applies to.
+	Kinds []string `protobuf:"bytes,3,rep,name=Kinds,proto3" json:"kinds"`
+	// Count is the amount of people that need to be matched for this policy to be fulfilled.
+	Count int32 `protobuf:"varint,4,opt,name=Count,proto3" json:"count"`
+	// OnLeave is the behaviour that's used when the policy is no longer fulfilled
+	// for a live session.
 	OnLeave              string   `protobuf:"bytes,5,opt,name=OnLeave,proto3" json:"on_leave"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -4434,10 +4441,15 @@ func (m *SessionRequirePolicy) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SessionRequirePolicy proto.InternalMessageInfo
 
+// SessionJoinPolicy defines a policy that allows a user to join sessions.
 type SessionJoinPolicy struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=Name,proto3" json:"name"`
-	Roles                []string `protobuf:"bytes,2,rep,name=Roles,proto3" json:"roles"`
-	Kinds                []string `protobuf:"bytes,3,rep,name=Kinds,proto3" json:"kinds"`
+	// Name is the name of the policy.
+	Name string `protobuf:"bytes,1,opt,name=Name,proto3" json:"name"`
+	// Roles is a list of roles that you can join the session of.
+	Roles []string `protobuf:"bytes,2,rep,name=Roles,proto3" json:"roles"`
+	// Kinds are the session kinds this policy applies to.
+	Kinds []string `protobuf:"bytes,3,rep,name=Kinds,proto3" json:"kinds"`
+	// Modes is a list of permitted participant modes for this policy.
 	Modes                []string `protobuf:"bytes,4,rep,name=Modes,proto3" json:"modes"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`

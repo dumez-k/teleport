@@ -30,48 +30,73 @@ const (
 	SessionPeerMode       SessionParticipantMode = "peer"
 )
 
+// SessionKind is a type of session. `ssh` and `k8s` are valid values.
 type SessionKind string
+
+// SessionParticipantMode is the mode that determines what you can do when you join a session.
+// `observer`, `moderator` and `peer` are valid values.
 type SessionParticipantMode string
 
+// SessionTracker is a resource which tracks an active session.
 type SessionTracker interface {
 	Resource
 
+	// GetID returns the ID of the session.
 	GetID() string
 
+	// GetNamespace returns the namespace of the session.
 	GetNamespace() string
 
+	// GetSessionKind returns the kind of the session.
 	GetSessionKind() SessionKind
 
+	// GetState returns the state of the session.
 	GetState() SessionState
 
+	// SetState sets the state of the session.
 	SetState(SessionState) error
 
+	// GetCreated returns the time at which the session was created.
 	GetCreated() time.Time
 
+	// GetExpires return the time at which the session expires.
 	GetExpires() time.Time
 
+	// GetReason returns the reason for the session.
 	GetReason() string
 
+	// GetInvited returns a list of people invited to the session.
 	GetInvited() []string
 
+	// GetHostname returns the hostname of the session target.
 	GetHostname() string
 
+	// GetAddress returns the address of the session target.
 	GetAddress() string
 
+	// GetClustername returns the name of the cluster.
 	GetClustername() string
 
+	// GetLogin returns the target machine username used for this session.
 	GetLogin() string
 
+	// GetParticipants returns the list of participants in the session.
 	GetParticipants() []*Participant
 
+	// AddParticipant adds a participant to the session tracker.
 	AddParticipant(*Participant)
 
+	// RemoveParticipant removes a participant from the session tracker.
 	RemoveParticipant(string) error
 
+	// UpdatePresence updates presence timestamp of a participant.
 	UpdatePresence(string) error
 
+	// GetKubeCluster returns the name of the kubernetes cluster the session is running in.
 	GetKubeCluster() string
 
+	// GetHostUser fetches the user marked as the "host" of the session.
+	// Things like RBAC policies are determined from this user.
 	GetHostUser() string
 }
 
@@ -149,9 +174,10 @@ func (c *SessionTrackerV1) SetSubKind(sk string) {
 	c.SubKind = sk
 }
 
+// CheckAndSetDefaults sets defaults for the session resource.
 func (s *SessionTrackerV1) CheckAndSetDefaults() error {
 	s.Kind = KindSessionTracker
-	s.Version = V3
+	s.Version = V1
 
 	if err := s.Metadata.CheckAndSetDefaults(); err != nil {
 		return trace.Wrap(err)
@@ -160,22 +186,27 @@ func (s *SessionTrackerV1) CheckAndSetDefaults() error {
 	return nil
 }
 
+// GetID returns the ID of the session.
 func (s *SessionTrackerV1) GetID() string {
 	return s.Spec.SessionID
 }
 
+// GetNamespace returns the namespace of the session.
 func (s *SessionTrackerV1) GetNamespace() string {
 	return s.Spec.Namespace
 }
 
+// GetSessionKind returns the kind of the session.
 func (s *SessionTrackerV1) GetSessionKind() SessionKind {
 	return SessionKind(s.Spec.Type)
 }
 
+// GetState returns the state of the session.
 func (s *SessionTrackerV1) GetState() SessionState {
 	return s.Spec.State
 }
 
+// SetState sets the state of the session.
 func (s *SessionTrackerV1) SetState(state SessionState) error {
 	switch state {
 	default:
@@ -190,46 +221,57 @@ func (s *SessionTrackerV1) SetState(state SessionState) error {
 	}
 }
 
+// GetCreated returns the time at which the session was created.
 func (s *SessionTrackerV1) GetCreated() time.Time {
 	return s.Spec.Created
 }
 
+// GetExpires return the time at which the session expires.
 func (s *SessionTrackerV1) GetExpires() time.Time {
 	return s.Spec.Expires
 }
 
+// GetReason returns the reason for the session.
 func (s *SessionTrackerV1) GetReason() string {
 	return s.Spec.Reason
 }
 
+// GetInvited returns a list of people invited to the session.
 func (s *SessionTrackerV1) GetInvited() []string {
 	return s.Spec.Invited
 }
 
+// GetHostname returns the hostname of the session target.
 func (s *SessionTrackerV1) GetHostname() string {
 	return s.Spec.Hostname
 }
 
+// GetAddress returns the address of the session target.
 func (s *SessionTrackerV1) GetAddress() string {
 	return s.Spec.Address
 }
 
+// GetClustername returns the name of the cluster the session is running in.
 func (s *SessionTrackerV1) GetClustername() string {
 	return s.Spec.ClusterName
 }
 
+// GetLogin returns the target machine username used for this session.
 func (s *SessionTrackerV1) GetLogin() string {
 	return s.Spec.Login
 }
 
+// GetParticipants returns a list of participants in the session.
 func (s *SessionTrackerV1) GetParticipants() []*Participant {
 	return s.Spec.Participants
 }
 
+// AddParticipant adds a participant to the session tracker.
 func (s *SessionTrackerV1) AddParticipant(participant *Participant) {
 	s.Spec.Participants = append(s.Spec.Participants, participant)
 }
 
+// RemoveParticipant removes a participant from the session tracker.
 func (s *SessionTrackerV1) RemoveParticipant(id string) error {
 	for i, participant := range s.Spec.Participants {
 		if participant.ID == id {
@@ -241,14 +283,18 @@ func (s *SessionTrackerV1) RemoveParticipant(id string) error {
 	return trace.BadParameter("participant %v not found", id)
 }
 
+// GetKubeCluster returns the name of the kubernetes cluster the session is running in.
 func (s *SessionTrackerV1) GetKubeCluster() string {
 	return s.Spec.KubernetesCluster
 }
 
+// GetHostUser fetches the user marked as the "host" of the session.
+// Things like RBAC policies are determined from this user.
 func (s *SessionTrackerV1) GetHostUser() string {
 	return s.Spec.HostUser
 }
 
+// UpdatePresence updates presence timestamp of a participant.
 func (s *SessionTrackerV1) UpdatePresence(user string) error {
 	for _, participant := range s.Spec.Participants {
 		if participant.User == user {

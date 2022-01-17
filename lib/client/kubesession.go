@@ -35,6 +35,7 @@ import (
 
 const mfaChallengeInterval = time.Second * 30
 
+// KubeSession a joined kubernetes session from the client side.
 type KubeSession struct {
 	stream    *streamproto.SessionStream
 	term      *terminal.Terminal
@@ -43,6 +44,7 @@ type KubeSession struct {
 	meta      types.SessionTracker
 }
 
+// NewKubeSession joins a live kubernetes session.
 func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionTracker, key *Key, kubeAddr string, tlsServer string, mode types.SessionParticipantMode) (*KubeSession, error) {
 	close := utils.NewCloseBroadcaster()
 	closeWait := &sync.WaitGroup{}
@@ -163,6 +165,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 	return s, nil
 }
 
+// pipeInOut starts background tasks that copy input to and from the terminal.
 func (s *KubeSession) pipeInOut() {
 	go func() {
 		defer s.close.Close()
@@ -202,10 +205,12 @@ func (s *KubeSession) pipeInOut() {
 	}()
 }
 
+// Wait waits for the session to finish.
 func (s *KubeSession) Wait() {
 	s.closeWait.Wait()
 }
 
+// Close sends a close request to the other end and waits it to gracefully terminate the connection.
 func (s *KubeSession) Close() {
 	s.close.Close()
 	s.closeWait.Wait()
