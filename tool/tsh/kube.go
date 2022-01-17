@@ -64,6 +64,7 @@ import (
 =======
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/cmd/util/podcmd"
 	"k8s.io/kubectl/pkg/polymorphichelpers"
 	"k8s.io/kubectl/pkg/scheme"
@@ -203,30 +204,6 @@ func (c *kubeJoinCommand) run(cf *CLIConf) error {
 
 	session.Wait()
 	return nil
-}
-
-func kubeExecCommandAssembler(c *kubeExecCommand) []string {
-	var cmd []string
-	cmd = append(cmd, "kubectl", "exec")
-	if c.container != "" {
-		cmd = append(cmd, "-c", c.container)
-	}
-	if c.filename != "" {
-		cmd = append(cmd, "-f", c.filename)
-	}
-	if c.quiet {
-		cmd = append(cmd, "-q")
-	}
-	if c.stdin {
-		cmd = append(cmd, "-i")
-	}
-	if c.tty {
-		cmd = append(cmd, "-t")
-	}
-	cmd = append(cmd, c.target, "--")
-	cmd = append(cmd, c.command...)
-	fmt.Println(cmd)
-	return cmd
 }
 
 // RemoteExecutor defines the interface accepted by the Exec command - provided for test stubbing
@@ -456,8 +433,39 @@ func newKubeExecCommand(parent *kingpin.CmdClause) *kubeExecCommand {
 }
 
 func (c *kubeExecCommand) run(cf *CLIConf) error {
-	var options ExecOptions
-	return trace.Wrap(options.Run())
+	var p ExecOptions
+	var err error
+
+	kubeConfigFlags := genericclioptions.NewConfigFlags(true).WithDeprecatedPasswordFlag()
+	matchVersionKubeConfigFlags := cmdutil.NewMatchVersionFlags(kubeConfigFlags)
+	f := cmdutil.NewFactory(matchVersionKubeConfigFlags)
+	p.ResourceName = c.target
+	p.ContainerName = c.container
+	p.Quiet = c.quiet
+	p.Stdin = c.stdin
+	p.TTY = c.tty
+	p.Command = c.command
+	p.ExecutablePodFn = polymorphichelpers.AttachablePodForObjectFn
+	p.GetPodTimeout = time.Second * 5
+	p.Builder = f.NewBuilder
+	p.restClientGetter = f
+	p.Namespace, p.EnforceNamespace, err = f.ToRawKubeConfigLoader().Namespace()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	p.Config, err = f.ToRESTConfig()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	clientset, err := f.KubernetesClientSet()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	p.PodClient = clientset.CoreV1()
+	return trace.Wrap(p.Run())
 }
 
 type kubeSessionsCommand struct {
