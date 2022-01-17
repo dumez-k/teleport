@@ -1493,7 +1493,7 @@ func TestCheckRuleAccess(t *testing.T) {
 
 func TestGuessIfAccessIsPossible(t *testing.T) {
 	// Examples from https://goteleport.com/docs/access-controls/reference/#rbac-for-sessions.
-	ownSessions, err := types.NewRole("own-sessions", types.RoleSpecV4{
+	ownSessions, err := types.NewRole("own-sessions", types.RoleSpecV5{
 		Allow: types.RoleConditions{
 			Rules: []types.Rule{
 				{
@@ -1505,7 +1505,7 @@ func TestGuessIfAccessIsPossible(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	ownSSHSessions, err := types.NewRole("own-ssh-sessions", types.RoleSpecV4{
+	ownSSHSessions, err := types.NewRole("own-ssh-sessions", types.RoleSpecV5{
 		Allow: types.RoleConditions{
 			Rules: []types.Rule{
 				{
@@ -1527,7 +1527,7 @@ func TestGuessIfAccessIsPossible(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simple, all-or-nothing roles.
-	readAllSessions, err := types.NewRole("all-sessions", types.RoleSpecV4{
+	readAllSessions, err := types.NewRole("all-sessions", types.RoleSpecV5{
 		Allow: types.RoleConditions{
 			Rules: []types.Rule{
 				{
@@ -1538,7 +1538,7 @@ func TestGuessIfAccessIsPossible(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	allowSSHSessions, err := types.NewRole("all-ssh-sessions", types.RoleSpecV4{
+	allowSSHSessions, err := types.NewRole("all-ssh-sessions", types.RoleSpecV5{
 		Allow: types.RoleConditions{
 			Rules: []types.Rule{
 				{
@@ -1549,7 +1549,7 @@ func TestGuessIfAccessIsPossible(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	denySSHSessions, err := types.NewRole("deny-ssh-sessions", types.RoleSpecV4{
+	denySSHSessions, err := types.NewRole("deny-ssh-sessions", types.RoleSpecV5{
 		Deny: types.RoleConditions{
 			Rules: []types.Rule{
 				{

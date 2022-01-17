@@ -1110,7 +1110,7 @@ func testKubeTransportProtocol(t *testing.T, suite *KubeSuite) {
 
 	username := suite.me.Username
 	kubeGroups := []string{testImpersonationGroup}
-	role, err := types.NewRole("kubemaster", types.RoleSpecV4{
+	role, err := types.NewRole("kubemaster", types.RoleSpecV5{
 		Allow: types.RoleConditions{
 			Logins:     []string{username},
 			KubeGroups: kubeGroups,
