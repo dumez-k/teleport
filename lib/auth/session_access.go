@@ -31,7 +31,8 @@ import (
 // and if a user can join a session.
 //
 // The current implementation is very simple and uses a brute-force algorithm.
-// More efficient implementations that run in non O(n^2)-ish time a possible but require significant complexity.
+// More efficient implementations that run in non O(n^2)-ish time a possible but require complex
+// and non intuitive code.
 // In the real world, the number of roles and session are small enough that this doesn't have a meaningful impact.
 type SessionAccessEvaluator struct {
 	kind     types.SessionKind
