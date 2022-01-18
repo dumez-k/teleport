@@ -22,6 +22,7 @@ import (
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/trace"
+	"github.com/ryanuber/go-glob"
 	"github.com/vulcand/predicate"
 )
 
@@ -87,13 +88,16 @@ func contains(s []string, e types.SessionKind) bool {
 
 // SessionAccessContext is the context that must be provided per participant in the session.
 type SessionAccessContext struct {
-	Roles []types.Role
+	Username string
+	Roles    []types.Role
 }
 
 func (ctx *SessionAccessContext) GetIdentifier(fields []string) (interface{}, error) {
-	if fields[0] == "user" {
-		if len(fields) == 2 {
+	if fields[0] == "participant" {
+		if len(fields) == 2 || len(fields) == 3 {
 			switch fields[1] {
+			case "name":
+				return ctx.Username, nil
 			case "roles":
 				var roles []string
 				for _, role := range ctx.Roles {
@@ -113,7 +117,7 @@ func (ctx *SessionAccessContext) GetResource() (types.Resource, error) {
 }
 
 func (e *SessionAccessEvaluator) matchesPredicate(ctx *SessionAccessContext, require *types.SessionRequirePolicy, allow *types.SessionJoinPolicy) (bool, error) {
-	if !contains(require.Kinds, e.kind) || !contains(allow.Kinds, e.kind) {
+	if !e.matchesKind(require.Kinds) || !e.matchesKind(allow.Kinds) {
 		return false, nil
 	}
 
@@ -136,13 +140,15 @@ func (e *SessionAccessEvaluator) matchesPredicate(ctx *SessionAccessContext, req
 }
 
 func (e *SessionAccessEvaluator) matchesJoin(allow *types.SessionJoinPolicy) bool {
-	if !contains(allow.Kinds, e.kind) {
+	if !e.matchesKind(allow.Kinds) {
 		return false
 	}
 
 	for _, requireRole := range e.roles {
 		for _, allowRole := range allow.Roles {
-			if requireRole.GetName() == allowRole {
+			matched := glob.Glob(requireRole.GetName(), allowRole)
+
+			if matched {
 				return true
 			}
 		}
@@ -151,8 +157,24 @@ func (e *SessionAccessEvaluator) matchesJoin(allow *types.SessionJoinPolicy) boo
 	return false
 }
 
+func (e *SessionAccessEvaluator) matchesKind(allow []string) bool {
+	if contains(allow, e.kind) || contains(allow, "*") {
+		return true
+	}
+
+	return false
+}
+
 // CanJoin checks if a given user is eligible to join a session.
 func (e *SessionAccessEvaluator) CanJoin(user SessionAccessContext) []types.SessionParticipantMode {
+	if !e.isPoisoned() {
+		return []types.SessionParticipantMode{
+			types.SessionObserverMode,
+			types.SessionModeratorMode,
+			types.SessionPeerMode,
+		}
+	}
+
 	var modes []types.SessionParticipantMode
 
 	for _, allowPolicy := range getAllowPolicies(user) {
@@ -185,7 +207,7 @@ type PolicyOptions struct {
 
 // FulfilledFor checks if a given session may run with a list of participants.
 func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContext) (bool, PolicyOptions, error) {
-	if len(e.requires) == 0 {
+	if len(e.requires) == 0 || !e.isPoisoned() {
 		return true, PolicyOptions{}, nil
 	}
 
@@ -224,4 +246,19 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 	}
 
 	return false, PolicyOptions{}, nil
+}
+
+// isPoisoned checks if a set of roles contains any v5 roles.
+// If a set only has v4 or earlier roles, we don't want to apply the access checks
+// to ssh sessions.
+func (e *SessionAccessEvaluator) isPoisoned() bool {
+	if e.kind == types.SSHSessionKind {
+		for _, role := range e.roles {
+			if role.GetVersion() == types.V5 {
+				return true
+			}
+		}
+	}
+
+	return false
 }

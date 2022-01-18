@@ -815,7 +815,8 @@ func (s *session) join(p *party) error {
 		}
 
 		accessContext := auth.SessionAccessContext{
-			Roles: roles,
+			Username: p.Ctx.User.GetName(),
+			Roles:    roles,
 		}
 
 		modes := s.accessEvaluator.CanJoin(accessContext)

@@ -80,6 +80,7 @@ require (
 	github.com/prometheus/common v0.28.0
 	github.com/russellhaering/gosaml2 v0.6.1-0.20210916051624-757d23f1bc28
 	github.com/russellhaering/goxmldsig v1.1.1
+	github.com/ryanuber/go-glob v1.0.0
 	github.com/sethvargo/go-diceware v0.2.1
 	github.com/siddontang/go-mysql v1.1.0
 	github.com/sirupsen/logrus v1.8.1-0.20210219125412-f104497f2b21

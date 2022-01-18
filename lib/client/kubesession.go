@@ -68,7 +68,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 	if err != nil {
 		body, _ := ioutil.ReadAll(resp.Body)
 		bodyString := string(body)
-		fmt.Printf("handshake failed with status %d\nand body: %v\n", resp.StatusCode, bodyString)
+		fmt.Printf("Handshake failed with status %d\nand body: %v\n", resp.StatusCode, bodyString)
 		return nil, trace.Wrap(err)
 	}
 
@@ -171,7 +171,7 @@ func (s *KubeSession) pipeInOut() {
 		defer s.close.Close()
 		_, err := io.Copy(s.term.Stdout(), s.stream)
 		if err != nil {
-			fmt.Printf("error while reading remote stream: %v\n\r", err.Error())
+			fmt.Printf("Error while reading remote stream: %v\n\r", err.Error())
 		}
 	}()
 

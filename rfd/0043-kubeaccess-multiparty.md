@@ -410,7 +410,7 @@ To make it more workable, the language has been slimmed down significantly to ha
 
 ##### Provided variables
 
-- `viewer`
+- `participant`
 ```json
 {
   "traits": "map<string, []string>",

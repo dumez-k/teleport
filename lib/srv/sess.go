@@ -1448,7 +1448,10 @@ func (s *session) checkIfStart() (bool, error) {
 	s.mu.Lock()
 
 	for _, party := range s.parties {
-		participants = append(participants, auth.SessionAccessContext{Roles: party.ctx.Identity.RoleSet})
+		participants = append(participants, auth.SessionAccessContext{
+			Username: party.ctx.Identity.TeleportUser,
+			Roles:    party.ctx.Identity.RoleSet,
+		})
 	}
 
 	defer s.mu.Unlock()

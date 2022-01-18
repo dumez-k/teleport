@@ -32,6 +32,7 @@ const (
 	sessionPrefix               = "session_tracker"
 	sessionList                 = "list"
 	gcDelay       time.Duration = time.Minute * 5
+	retryDelay    time.Duration = time.Second
 )
 
 // SessionTrackerService is a realtime session service that has information about
@@ -125,6 +126,7 @@ func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) 
 	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
 	if trace.IsCompareFailed(err) {
 		log.Infof("Session resource %v presence update failed, retrying: %v", sessionID, err)
+		time.Sleep(retryDelay)
 		return s.UpdatePresence(ctx, sessionID, user)
 	} else {
 		return trace.Wrap(err)
@@ -241,6 +243,7 @@ func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateS
 	item := backend.Item{Key: backend.Key(sessionPrefix, req.SessionID), Value: sessionJSON}
 	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
 	if trace.IsCompareFailed(err) {
+		time.Sleep(retryDelay)
 		return s.UpdateSessionTracker(ctx, req)
 	} else {
 		return trace.Wrap(err)
@@ -325,8 +328,13 @@ func (s *sessionV2) removeSessionFromList(ctx context.Context, sessionID string)
 	}
 
 	newListItem := backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: listJSON}
-	_, err = s.bk.Update(ctx, newListItem)
-	return trace.Wrap(err)
+	_, err = s.bk.CompareAndSwap(ctx, *listItem, newListItem)
+	if trace.IsCompareFailed(err) {
+		time.Sleep(retryDelay)
+		return s.removeSessionFromList(ctx, sessionID)
+	} else {
+		return trace.Wrap(err)
+	}
 }
 
 func (s *sessionV2) getSessionList(ctx context.Context) ([]string, error) {
