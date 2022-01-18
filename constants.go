@@ -625,6 +625,12 @@ const (
 
 	// MFAPresenceRequest is an SSH request to notify clients that MFA presence is required for a session.
 	MFAPresenceRequest = "x-teleport-mfa-presence"
+
+	// SSHSessionReasonEnv is a reason attached to started sessions meant to describe their intent.
+	SSHSessionReasonEnv = "x-teleport-reason"
+
+	// SSHSessionInvitedEnv is a list of people invited to a session.
+	SSHSessionInvitedEnv = "x-teleport-invited"
 )
 
 const (

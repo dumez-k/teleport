@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -331,6 +332,12 @@ type Config struct {
 	// TLSRoutingEnabled indicates that proxy supports ALPN SNI server where
 	// all proxy services are exposed on a single TLS listener (Proxy Web Listener).
 	TLSRoutingEnabled bool
+
+	// Reason is a reason attached to started sessions meant to describe their intent.
+	Reason string
+
+	// Invited is a list of people invited to a session.
+	Invited []string
 }
 
 // CachePolicy defines cache policy for local clients
@@ -2045,6 +2052,14 @@ func (tc *TeleportClient) runCommand(ctx context.Context, nodeClient *NodeClient
 func (tc *TeleportClient) runShell(nodeClient *NodeClient, mode types.SessionParticipantMode, sessToJoin *session.Session, beforeStart func(io.Writer)) error {
 	env := make(map[string]string)
 	env[teleport.SSHJoinModeEnv] = string(mode)
+	env[teleport.SSHSessionReasonEnv] = tc.Config.Reason
+
+	encoded, err := json.Marshal(tc.Config.Invited)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	env[teleport.SSHSessionInvitedEnv] = string(encoded)
 	for key, value := range tc.Env {
 		env[key] = value
 	}

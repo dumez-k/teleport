@@ -265,7 +265,7 @@ type CLIConf struct {
 	Reason string
 
 	// Invited is a list of invited users to an ssh or kube session.
-	Invited string
+	Invited []string
 
 	// JoinMode is the participant mode someone is joining a session as.
 	JoinMode string
@@ -453,7 +453,7 @@ func Run(args []string, opts ...cliOption) error {
 	join.Flag("cluster", clusterHelp).StringVar(&cf.SiteName)
 	join.Flag("mode", "Mode of joining the session, valid modes are observer and moderator").Short('m').Default("peer").StringVar(&cf.JoinMode)
 	join.Flag("reason", "The purpose of the session.").StringVar(&cf.Reason)
-	join.Flag("invite", "A comma separated list of people to mark as invited for the session.").StringVar(&cf.Invited)
+	join.Flag("invite", "A comma separated list of people to mark as invited for the session.").StringsVar(&cf.Invited)
 	join.Arg("session-id", "ID of the session to join").Required().StringVar(&cf.SessionID)
 	// play
 	play := app.Command("play", "Replay the recorded SSH session")
@@ -2058,6 +2058,8 @@ func makeClient(cf *CLIConf, useProfileLogin bool) (*client.TeleportClient, erro
 		}
 	}
 
+	tc.Config.Reason = cf.Reason
+	tc.Config.Invited = cf.Invited
 	return tc, nil
 }
 
