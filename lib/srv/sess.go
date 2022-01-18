@@ -190,12 +190,14 @@ func (s *SessionRegistry) OpenSession(ch ssh.Channel, req *ssh.Request, ctx *Ser
 	if session != nil {
 		ctx.Infof("Joining existing session %v.", session.id)
 
-		// Update the in-memory data structure that a party member has joined.
 		mode := types.SessionParticipantMode(ctx.env[teleport.SSHJoinModeEnv])
-		if mode == "" {
+		switch mode {
+		case types.SessionModeratorMode, types.SessionObserverMode:
+		default:
 			mode = types.SessionPeerMode
 		}
 
+		// Update the in-memory data structure that a party member has joined.
 		_, err := session.join(ch, req, ctx, mode)
 		if err != nil {
 			return trace.Wrap(err)

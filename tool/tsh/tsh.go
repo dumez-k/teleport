@@ -1736,6 +1736,10 @@ func onBenchmark(cf *CLIConf) error {
 
 // onJoin executes 'ssh join' command
 func onJoin(cf *CLIConf) error {
+	if err := validateParticipantMode(types.SessionParticipantMode(cf.JoinMode)); err != nil {
+		return trace.Wrap(err)
+	}
+
 	tc, err := makeClient(cf, true)
 	if err != nil {
 		return trace.Wrap(err)
@@ -2502,4 +2506,13 @@ func handleUnimplementedError(ctx context.Context, perr error, cf CLIConf) error
 		return trace.WrapWithMessage(perr, errMsgFormat, unknownServerVersion, teleport.Version)
 	}
 	return trace.WrapWithMessage(perr, errMsgFormat, pr.ServerVersion, teleport.Version)
+}
+
+func validateParticipantMode(mode types.SessionParticipantMode) error {
+	switch mode {
+	case types.SessionPeerMode, types.SessionObserverMode, types.SessionModeratorMode:
+		return nil
+	default:
+		return trace.BadParameter("invalid participant mode %v", mode)
+	}
 }

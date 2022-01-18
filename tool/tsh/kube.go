@@ -129,6 +129,10 @@ func (c *kubeJoinCommand) getSessionMeta(ctx context.Context, tc *client.Telepor
 }
 
 func (c *kubeJoinCommand) run(cf *CLIConf) error {
+	if err := validateParticipantMode(types.SessionParticipantMode(c.mode)); err != nil {
+		return trace.Wrap(err)
+	}
+
 	cf.SiteName = c.siteName
 	tc, err := makeClient(cf, true)
 	if err != nil {
