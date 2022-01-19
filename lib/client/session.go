@@ -600,9 +600,7 @@ func (ns *NodeSession) pipeInOut(shell io.ReadWriteCloser, mode types.SessionPar
 	}()
 
 	switch mode {
-	case types.SessionObserverMode:
-		fallthrough
-	case types.SessionModeratorMode:
+	case types.SessionObserverMode, types.SessionModeratorMode:
 		go func() {
 			defer ns.closer.Close()
 

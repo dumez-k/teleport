@@ -55,12 +55,8 @@ func NewSessionTrackerService(bk backend.Backend) (services.SessionTrackerServic
 }
 
 func createList(bk backend.Backend) error {
-	data, err := utils.FastMarshal([]string{})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	_, err = bk.Create(context.TODO(), backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: data})
+	data := []byte("[]")
+	_, err := bk.Create(context.TODO(), backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: data})
 	if err != nil {
 		return err
 	}

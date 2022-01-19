@@ -127,7 +127,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 				size := remotecommand.TerminalSize{Width: uint16(w), Height: uint16(h)}
 				err = stream.Resize(&size)
 				if err != nil {
-					return
+					fmt.Printf("Error attempting to resize terminal: %v\n\r", err)
 				}
 			}
 
