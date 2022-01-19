@@ -289,7 +289,7 @@ func (a *ServerWithRoles) GetActiveSessionTrackers(ctx context.Context) ([]types
 
 		var hostRoles []types.Role
 		for _, roleName := range host.GetRoles() {
-			role, err := a.GetRole(context.TODO(), roleName)
+			role, err := a.GetRole(ctx, roleName)
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
@@ -314,7 +314,7 @@ func (a *ServerWithRoles) GetActiveSessionTrackers(ctx context.Context) ([]types
 // RemoveSessionTracker removes a tracker resource for an active session.
 func (a *ServerWithRoles) RemoveSessionTracker(ctx context.Context, sessionID string) error {
 	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) && !a.hasBuiltinRole(string(types.RoleProxy)) {
-		return trace.AccessDenied("this request can be only executed by a proxy")
+		return trace.AccessDenied("this request can be only executed by a kubernetes proxy or kube node")
 	}
 
 	return a.authServer.RemoveSessionTracker(ctx, sessionID)
@@ -323,7 +323,7 @@ func (a *ServerWithRoles) RemoveSessionTracker(ctx context.Context, sessionID st
 // UpdateSessionTracker updates a tracker resource for an active session.
 func (a *ServerWithRoles) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
 	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) && !a.hasBuiltinRole(string(types.RoleProxy)) {
-		return trace.AccessDenied("this request can be only executed by a proxy")
+		return trace.AccessDenied("this request can be only executed by a kubernetes proxy or kube node")
 	}
 
 	return a.authServer.UpdateSessionTracker(ctx, req)
@@ -361,7 +361,6 @@ func (a *ServerWithRoles) GetSessions(namespace string) ([]session.Session, erro
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return sessions, nil
 	if cond == nil {
 		return sessions, nil
 	}
@@ -4027,10 +4026,14 @@ func (a *ServerWithRoles) GenerateCertAuthorityCRL(ctx context.Context, caType t
 	return crl, nil
 }
 
+// UpdatePresence is coupled to the service layer and must exist here but is never actually called
+// since it's handled by the session presence task. This is never valud to call.
 func (a *ServerWithRoles) UpdatePresence(ctx context.Context, sessionID, user string) error {
 	return trace.NotImplemented(notImplementedMessage)
 }
 
+// UpdatePresence is coupled to the service layer and must exist here but is never actually called
+// since it's handled by the session presence task. This is never valud to call.
 func (a *ServerWithRoles) MaintainSessionPresence(ctx context.Context) (proto.AuthService_MaintainSessionPresenceClient, error) {
 	return nil, trace.NotImplemented(notImplementedMessage)
 }
