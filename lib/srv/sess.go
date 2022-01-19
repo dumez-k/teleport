@@ -190,7 +190,7 @@ func (s *SessionRegistry) OpenSession(ch ssh.Channel, req *ssh.Request, ctx *Ser
 	if session != nil {
 		ctx.Infof("Joining existing session %v.", session.id)
 
-		mode := types.SessionParticipantMode(ctx.env[teleport.SSHJoinModeEnv])
+		mode := types.SessionParticipantMode(ctx.env[teleport.EnvSSHJoinMode])
 		switch mode {
 		case types.SessionModeratorMode, types.SessionObserverMode:
 		default:
@@ -1771,9 +1771,9 @@ func (s *session) trackerCreate(teleportUser string) error {
 		LastActive: time.Now().UTC(),
 	}
 
-	reason := s.scx.env[teleport.SSHSessionReasonEnv]
+	reason := s.scx.env[teleport.EnvSSHSessionReason]
 	var invited []string
-	err := json.Unmarshal([]byte(s.scx.env[teleport.SSHSessionInvitedEnv]), &invited)
+	err := json.Unmarshal([]byte(s.scx.env[teleport.EnvSSHSessionInvited]), &invited)
 	if err != nil {
 		return trace.Wrap(err)
 	}

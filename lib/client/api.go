@@ -2051,15 +2051,15 @@ func (tc *TeleportClient) runCommand(ctx context.Context, nodeClient *NodeClient
 // sessionID : when empty, creates a new shell. otherwise it tries to join the existing session.
 func (tc *TeleportClient) runShell(nodeClient *NodeClient, mode types.SessionParticipantMode, sessToJoin *session.Session, beforeStart func(io.Writer)) error {
 	env := make(map[string]string)
-	env[teleport.SSHJoinModeEnv] = string(mode)
-	env[teleport.SSHSessionReasonEnv] = tc.Config.Reason
+	env[teleport.EnvSSHJoinMode] = string(mode)
+	env[teleport.EnvSSHSessionReason] = tc.Config.Reason
 
 	encoded, err := json.Marshal(&tc.Config.Invited)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	env[teleport.SSHSessionInvitedEnv] = string(encoded)
+	env[teleport.EnvSSHSessionInvited] = string(encoded)
 	for key, value := range tc.Env {
 		env[key] = value
 	}

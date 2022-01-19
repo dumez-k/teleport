@@ -620,17 +620,17 @@ const (
 	// ForceTerminateRequest is an SSH request to forcefully terminate a session.
 	ForceTerminateRequest = "x-teleport-force-terminate"
 
-	// SSHJoinModeEnv is the SSH environment variable that contains the requested participant mode.
-	SSHJoinModeEnv = "x-teleport-join-mode"
-
 	// MFAPresenceRequest is an SSH request to notify clients that MFA presence is required for a session.
 	MFAPresenceRequest = "x-teleport-mfa-presence"
 
-	// SSHSessionReasonEnv is a reason attached to started sessions meant to describe their intent.
-	SSHSessionReasonEnv = "x-teleport-reason"
+	// EnvSSHJoinMode is the SSH environment variable that contains the requested participant mode.
+	EnvSSHJoinMode = "TELEPORT_SSH_JOIN_MODE"
 
-	// SSHSessionInvitedEnv is a list of people invited to a session.
-	SSHSessionInvitedEnv = "x-teleport-invited"
+	// EnvSSHSessionReason is a reason attached to started sessions meant to describe their intent.
+	EnvSSHSessionReason = "TELEPORT_SESSION_REASON"
+
+	// EnvSSHSessionInvited is an environment variable listning people invited to a session.
+	EnvSSHSessionInvited = "TELEPORT_SESSION_JOIN_MODE"
 )
 
 const (
