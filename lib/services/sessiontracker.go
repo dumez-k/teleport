@@ -57,7 +57,7 @@ type SessionTrackerService interface {
 	UpdatePresence(ctx context.Context, sessionID, user string) error
 }
 
-type sessionV2 struct {
+type sessionTracker struct {
 	bk backend.Backend
 }
 
@@ -72,7 +72,7 @@ func NewSessionTrackerService(bk backend.Backend) (SessionTrackerService, error)
 		return nil, trace.Wrap(err)
 	}
 
-	return &sessionV2{bk}, nil
+	return &sessionTracker{bk}, nil
 }
 
 func createList(bk backend.Backend) error {
@@ -89,7 +89,7 @@ func createList(bk backend.Backend) error {
 	return nil
 }
 
-func (s *sessionV2) loadSession(ctx context.Context, sessionID string) (types.SessionTracker, error) {
+func (s *sessionTracker) loadSession(ctx context.Context, sessionID string) (types.SessionTracker, error) {
 	sessionJSON, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionID))
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -104,7 +104,7 @@ func (s *sessionV2) loadSession(ctx context.Context, sessionID string) (types.Se
 }
 
 // UpdatePresence updates the presence status of a user in a session.
-func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) error {
+func (s *sessionTracker) UpdatePresence(ctx context.Context, sessionID, user string) error {
 	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionID))
 	if err != nil {
 		return trace.Wrap(err)
@@ -134,7 +134,7 @@ func (s *sessionV2) UpdatePresence(ctx context.Context, sessionID, user string) 
 }
 
 // GetSessionTracker returns the current state of a session tracker for an active session.
-func (s *sessionV2) GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error) {
+func (s *sessionTracker) GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error) {
 	session, err := s.loadSession(ctx, sessionID)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -144,7 +144,7 @@ func (s *sessionV2) GetSessionTracker(ctx context.Context, sessionID string) (ty
 }
 
 // GetActiveSessionTrackers returns a list of active session trackers.
-func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
+func (s *sessionTracker) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
 	sessionList, err := s.getSessionList(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -164,7 +164,7 @@ func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.Sessi
 }
 
 // CreateSessionTracker creates a tracker resource for an active session.
-func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (types.SessionTracker, error) {
+func (s *sessionTracker) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (types.SessionTracker, error) {
 	now := time.Now().UTC()
 
 	spec := types.SessionTrackerSpecV1{
@@ -209,7 +209,7 @@ func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateS
 }
 
 // UpdateSessionTracker updates a tracker resource for an active session.
-func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
+func (s *sessionTracker) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
 	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, req.SessionID))
 	if err != nil {
 		return trace.Wrap(err)
@@ -250,7 +250,7 @@ func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateS
 }
 
 // RemoveSessionTracker removes a tracker resource for an active session.
-func (s *sessionV2) RemoveSessionTracker(ctx context.Context, sessionID string) error {
+func (s *sessionTracker) RemoveSessionTracker(ctx context.Context, sessionID string) error {
 	err := s.removeSessionFromList(ctx, sessionID)
 	if err != nil {
 		return trace.Wrap(err)
@@ -259,7 +259,7 @@ func (s *sessionV2) RemoveSessionTracker(ctx context.Context, sessionID string) 
 	return trace.Wrap(s.bk.Delete(ctx, backend.Key(sessionPrefix, sessionID)))
 }
 
-func (s *sessionV2) addSessionToList(ctx context.Context, sessionID string) error {
+func (s *sessionTracker) addSessionToList(ctx context.Context, sessionID string) error {
 	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
 	if err != nil {
 		return trace.Wrap(err)
@@ -282,7 +282,7 @@ func (s *sessionV2) addSessionToList(ctx context.Context, sessionID string) erro
 	return trace.Wrap(err)
 }
 
-func (s *sessionV2) removeSessionFromList(ctx context.Context, sessionID string) error {
+func (s *sessionTracker) removeSessionFromList(ctx context.Context, sessionID string) error {
 	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
 	if err != nil {
 		return trace.Wrap(err)
@@ -336,7 +336,7 @@ func (s *sessionV2) removeSessionFromList(ctx context.Context, sessionID string)
 	}
 }
 
-func (s *sessionV2) getSessionList(ctx context.Context) ([]string, error) {
+func (s *sessionTracker) getSessionList(ctx context.Context) ([]string, error) {
 	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
 	if err != nil {
 		return nil, trace.Wrap(err)
