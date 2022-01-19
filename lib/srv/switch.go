@@ -25,17 +25,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func safeSend(ch chan bool, value bool) (closed bool) {
-	defer func() {
-		if recover() != nil {
-			closed = true
-		}
-	}()
-
-	ch <- value
-	return false
-}
-
 // BreakReader implements a reader wrapper that allows the connection
 // to be temporarily paused at any moment.
 type BreakReader struct {
@@ -102,13 +91,18 @@ func (r *BreakReader) Read(p []byte) (int, error) {
 		return n, nil
 	}
 
+	q := make(chan struct{})
 	c := make(chan bool)
 	go func() {
 		r.cond.L.Lock()
 
+	outer:
 		for {
-			if safeSend(c, r.on) {
-				break
+			select {
+			case c <- r.on:
+			case <-q:
+				close(c)
+				break outer
 			}
 
 			r.cond.Wait()
@@ -128,7 +122,7 @@ func (r *BreakReader) Read(p []byte) (int, error) {
 		case on = <-c:
 			continue
 		case r.remaining = <-r.in:
-			close(c)
+			close(q)
 			n := copy(p, r.remaining)
 			r.remaining = r.remaining[n:]
 			return n, nil
