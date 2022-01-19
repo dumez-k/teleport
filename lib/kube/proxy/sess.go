@@ -873,7 +873,7 @@ func (s *session) join(p *party) error {
 	}
 
 	recentWrites := s.clients_stdout.W.W.W.(*srv.MultiWriter).GetRecentWrites()
-	err = utils.WriteAll(p.Client.stdoutStream().Write, recentWrites)
+	_, err = p.Client.stdoutStream().Write(recentWrites)
 	if err != nil {
 		return trace.Wrap(err)
 	}

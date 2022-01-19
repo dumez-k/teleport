@@ -17,7 +17,6 @@ package srv
 import (
 	"sync"
 
-	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
 )
 
@@ -53,6 +52,6 @@ func (g *TermManager) BroadcastMessage(message string) error {
 	defer g.mu.Unlock()
 
 	data := []byte("\nTeleport > " + message + "\n")
-	err := utils.WriteAll(g.W.WriteUnconditional, data)
+	_, err := g.W.WriteUnconditional(data)
 	return trace.Wrap(err)
 }

@@ -163,7 +163,8 @@ func (w *SwitchWriter) On() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.on = true
-	return trace.Wrap(utils.WriteAll(w.W.Write, w.buffer))
+	_, err := w.W.Write(w.buffer)
+	return trace.Wrap(err)
 }
 
 // Off buffers incoming writes until the writer is turned on again.

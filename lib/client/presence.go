@@ -24,12 +24,11 @@ import (
 
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/lib/auth"
-	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
 )
 
 func runPresenceTask(ctx context.Context, out io.Writer, auth auth.ClientI, tc *TeleportClient, sessionID string) error {
-	err := utils.WriteAll(out.Write, []byte("\r\nTeleport > MFA presence enabled\r\n"))
+	_, err := out.Write([]byte("\r\nTeleport > MFA presence enabled\r\n"))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -37,7 +36,7 @@ func runPresenceTask(ctx context.Context, out io.Writer, auth auth.ClientI, tc *
 	ticker := time.NewTicker(mfaChallengeInterval)
 	stream, err := auth.MaintainSessionPresence(ctx)
 	if err != nil {
-		utils.WriteAll(out.Write, []byte(fmt.Sprintf("\r\nstream error: %v\r\n", err)))
+		out.Write([]byte(fmt.Sprintf("\r\nstream error: %v\r\n", err)))
 		return trace.Wrap(err)
 	}
 
@@ -85,15 +84,22 @@ outer:
 }
 
 func solveMFA(ctx context.Context, term io.Writer, tc *TeleportClient, challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
-	utils.WriteAll(term.Write, []byte("\r\nTeleport > Please tap your MFA key within 15 seconds\r\n"))
+	_, err := term.Write([]byte("\r\nTeleport > Please tap your MFA key within 15 seconds\r\n"))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	challenge.TOTP = nil
 
 	response, err := PromptMFAChallenge(ctx, tc.Config.WebProxyAddr, challenge, "", true)
 	if err != nil {
-		utils.WriteAll(term.Write, []byte(fmt.Sprintf("\r\nTeleport > Failed to confirm presence: %v\r\n", err)))
+		term.Write([]byte(fmt.Sprintf("\r\nTeleport > Failed to confirm presence: %v\r\n", err)))
 		return nil, trace.Wrap(err)
 	}
 
-	utils.WriteAll(term.Write, []byte("\r\nTeleport > Received MFA presence confirmation\r\n"))
+	_, err = term.Write([]byte("\r\nTeleport > Received MFA presence confirmation\r\n"))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 	return response, nil
 }
