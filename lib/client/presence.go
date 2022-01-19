@@ -34,6 +34,8 @@ func runPresenceTask(ctx context.Context, out io.Writer, auth auth.ClientI, tc *
 	}
 
 	ticker := time.NewTicker(mfaChallengeInterval)
+	defer ticker.Stop()
+
 	stream, err := auth.MaintainSessionPresence(ctx)
 	if err != nil {
 		out.Write([]byte(fmt.Sprintf("\r\nstream error: %v\r\n", err)))

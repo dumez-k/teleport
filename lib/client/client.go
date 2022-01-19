@@ -1171,7 +1171,7 @@ func (c *NodeClient) handleGlobalRequests(ctx context.Context, requestCh <-chan 
 			switch r.Type {
 			case teleport.MFAPresenceRequest:
 				if c.OnMFA == nil {
-					log.Warnf("Received MFA presence request, but no callback was provided.")
+					log.Warn("Received MFA presence request, but no callback was provided.")
 					continue
 				}
 

@@ -93,6 +93,8 @@ type SessionAccessContext struct {
 	Roles    []types.Role
 }
 
+// GetIdentifier is used by the `predicate` library to evaluate variable expressions when
+// evaluating policy filters. It deals with evaluating strings like `participant.name` to the appropriate value.
 func (ctx *SessionAccessContext) GetIdentifier(fields []string) (interface{}, error) {
 	if fields[0] == "participant" {
 		if len(fields) == 2 || len(fields) == 3 {
@@ -166,7 +168,8 @@ func (e *SessionAccessEvaluator) matchesKind(allow []string) bool {
 	return false
 }
 
-// CanJoin checks if a given user is eligible to join a session.
+// CanJoin returns the modes a user has access to join a session with.
+// If the list is empty, the user doesn't have access to join the session at all.
 func (e *SessionAccessEvaluator) CanJoin(user SessionAccessContext) []types.SessionParticipantMode {
 	if !e.isPoisoned() {
 		return []types.SessionParticipantMode{
@@ -252,6 +255,9 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 // isPoisoned checks if a set of roles contains any v5 roles.
 // If a set only has v4 or earlier roles, we don't want to apply the access checks
 // to ssh sessions.
+//
+// This only applies to ssh sessions since they previously had no access control for joining sessions.
+// We don't need this fallback behaviour for multiparty kubernetes since it's a new feature.
 func (e *SessionAccessEvaluator) isPoisoned() bool {
 	if e.kind == types.SSHSessionKind {
 		for _, role := range e.roles {

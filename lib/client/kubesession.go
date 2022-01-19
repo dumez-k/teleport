@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sync"
 	"time"
 
@@ -66,9 +65,8 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 
 	ws, resp, err := dialer.Dial(joinEndpoint, nil)
 	if err != nil {
-		body, _ := ioutil.ReadAll(resp.Body)
-		bodyString := string(body)
-		fmt.Printf("Handshake failed with status %d\nand body: %v\n", resp.StatusCode, bodyString)
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("Handshake failed with status %d\nand body: %v\n", resp.StatusCode, body)
 		return nil, trace.Wrap(err)
 	}
 
