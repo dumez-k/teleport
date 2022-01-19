@@ -146,7 +146,7 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 		cfg.WindowsDesktops = local.NewWindowsDesktopService(cfg.Backend)
 	}
 	if cfg.SessionTrackerService == nil {
-		cfg.SessionTrackerService, err = services.NewSessionTrackerService(cfg.Backend)
+		cfg.SessionTrackerService, err = local.NewSessionTrackerService(cfg.Backend)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
