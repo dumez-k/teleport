@@ -120,7 +120,7 @@ func (c *kubeJoinCommand) getSessionMeta(ctx context.Context, tc *client.Telepor
 	}
 
 	for _, session := range sessions {
-		if session.GetID() == c.session {
+		if session.GetSessionID() == c.session {
 			return session, nil
 		}
 	}
@@ -509,7 +509,7 @@ func (c *kubeSessionsCommand) run(cf *CLIConf) error {
 func printSessions(sessions []types.SessionTracker) {
 	table := asciitable.MakeTable([]string{"ID", "State", "Created", "Hostname", "Address", "Login", "Reason"})
 	for _, s := range sessions {
-		table.AddRow([]string{s.GetID(), s.GetState().String(), s.GetCreated().Format(time.RFC3339), s.GetHostname(), s.GetAddress(), s.GetLogin(), s.GetReason()})
+		table.AddRow([]string{s.GetSessionID(), s.GetState().String(), s.GetCreated().Format(time.RFC3339), s.GetHostname(), s.GetAddress(), s.GetLogin(), s.GetReason()})
 	}
 
 	output := table.AsBuffer().String()

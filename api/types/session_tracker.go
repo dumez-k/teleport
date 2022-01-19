@@ -30,22 +30,18 @@ const (
 	SessionPeerMode       SessionParticipantMode = "peer"
 )
 
-// SessionKind is a type of session. `ssh` and `k8s` are valid values.
+// SessionKind is a type of session.
 type SessionKind string
 
 // SessionParticipantMode is the mode that determines what you can do when you join a session.
-// `observer`, `moderator` and `peer` are valid values.
 type SessionParticipantMode string
 
 // SessionTracker is a resource which tracks an active session.
 type SessionTracker interface {
 	Resource
 
-	// GetID returns the ID of the session.
-	GetID() string
-
-	// GetNamespace returns the namespace of the session.
-	GetNamespace() string
+	// GetSessionID returns the ID of the session.
+	GetSessionID() string
 
 	// GetSessionKind returns the kind of the session.
 	GetSessionKind() SessionKind
@@ -106,10 +102,12 @@ func NewSession(spec SessionTrackerSpecV1) (SessionTracker, error) {
 	}
 
 	session := &SessionTrackerV1{
-		Kind:     KindSessionTracker,
-		Version:  V1,
-		Metadata: meta,
-		Spec:     spec,
+		ResourceHeader: ResourceHeader{
+			Kind:     KindSessionTracker,
+			Version:  V1,
+			Metadata: meta,
+		},
+		Spec: spec,
 	}
 
 	if err := session.Metadata.CheckAndSetDefaults(); err != nil {
@@ -186,19 +184,14 @@ func (s *SessionTrackerV1) CheckAndSetDefaults() error {
 	return nil
 }
 
-// GetID returns the ID of the session.
-func (s *SessionTrackerV1) GetID() string {
+// GetSessionID returns the ID of the session.
+func (s *SessionTrackerV1) GetSessionID() string {
 	return s.Spec.SessionID
-}
-
-// GetNamespace returns the namespace of the session.
-func (s *SessionTrackerV1) GetNamespace() string {
-	return s.Spec.Namespace
 }
 
 // GetSessionKind returns the kind of the session.
 func (s *SessionTrackerV1) GetSessionKind() SessionKind {
-	return SessionKind(s.Spec.Type)
+	return SessionKind(s.Spec.Kind)
 }
 
 // GetState returns the state of the session.
@@ -284,6 +277,8 @@ func (s *SessionTrackerV1) RemoveParticipant(id string) error {
 }
 
 // GetKubeCluster returns the name of the kubernetes cluster the session is running in.
+//
+// This is only valid for kubernetes sessions.
 func (s *SessionTrackerV1) GetKubeCluster() string {
 	return s.Spec.KubernetesCluster
 }

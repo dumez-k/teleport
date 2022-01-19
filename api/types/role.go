@@ -621,9 +621,8 @@ func (r *RoleV5) CheckAndSetDefaults() error {
 		if r.Spec.Allow.DatabaseLabels == nil {
 			r.Spec.Allow.DatabaseLabels = Labels{Wildcard: []string{Wildcard}}
 		}
-	case V4:
+	case V4, V5:
 		// Labels default to nil/empty for v4+ roles
-	case V5:
 	default:
 		return trace.BadParameter("unrecognized role version: %v", r.Version)
 	}

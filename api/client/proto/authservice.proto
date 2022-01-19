@@ -1417,8 +1417,10 @@ message ListResourcesResponse {
     string NextKey = 2 [ (gogoproto.jsontag) = "next_key,omitempty" ];
 }
 
-// CreateSessionRequest is a request to create a new session.
-message CreateSessionRequest {
+// CreateSessionTrackerRequest is a request to create a new session.
+//
+// This is not specific to any session type. Relevant fields should be set for a given session type.
+message CreateSessionTrackerRequest {
     // Namespace is a session namespace, separating sessions from each other.
     string Namespace = 1 [ (gogoproto.jsontag) = "namespace,omitempty" ];
 
@@ -1466,57 +1468,61 @@ message CreateSessionRequest {
     string ID = 13 [ (gogoproto.jsontag) = "id,omitempty" ];
 }
 
-// GetSessionRequest is a request to fetch a session resource.
-message GetSessionRequest {
+// GetSessionTrackerRequest is a request to fetch a session resource.
+message GetSessionTrackerRequest {
     // SessionID is unique identifier of this session.
     string SessionID = 1 [ (gogoproto.jsontag) = "session_id,omitempty" ];
 }
 
-// GetActiveSessionsResponse is a response containing active sessions.
-message GetActiveSessionsResponse {
+// GetActiveSessionTrackersResponse is a response containing active sessions.
+message GetActiveSessionTrackersResponse {
     // Sessions is a list of active sessions.
     repeated types.SessionTrackerV1 Sessions = 1;
 }
 
-// RemoveSessionRequest is a request to remove a session.
-message RemoveSessionRequest {
+// RemoveSessionTrackerRequest is a request to remove a session.
+message RemoveSessionTrackerRequest {
     // SessionID is unique identifier of this session.
     string SessionID = 1 [ (gogoproto.jsontag) = "session_id,omitempty" ];
 }
 
-message UpdateState {
-    // State is the new state of the session.
+message SessionTrackerUpdateState {
+    // State is the new state of the session tracker.
     types.SessionState State = 2 [ (gogoproto.jsontag) = "state,omitempty" ];
 }
 
-message AddParticipant {
+message SessionTrackerAddParticipant {
     // Participant is the participant to be added to the session.
     types.Participant Participant = 2 [ (gogoproto.jsontag) = "participant,omitempty" ];
 }
 
-message RemoveParticipant {
+message SessionTrackerRemoveParticipant {
     // ParticipantID is unique identifier of the participant.
     string ParticipantID = 2 [ (gogoproto.jsontag) = "participant_id,omitempty" ];
 }
 
-// UpdateSessionRequest is a request to update some state of a session.
-message UpdateSessionRequest {
+// UpdateSessionTrackerRequest is a request to update some state of a session.
+message UpdateSessionTrackerRequest {
     // SessionID is unique identifier of this session.
     string SessionID = 1 [ (gogoproto.jsontag) = "session_id,omitempty" ];
 
     oneof Update {
-        UpdateState UpdateState = 2 [ (gogoproto.jsontag) = "update_state,omitempty" ];
-        AddParticipant AddParticipant = 3 [ (gogoproto.jsontag) = "add_participant,omitempty" ];
-        RemoveParticipant RemoveParticipant = 4
+        SessionTrackerUpdateState UpdateState = 2
+            [ (gogoproto.jsontag) = "update_state,omitempty" ];
+        SessionTrackerAddParticipant AddParticipant = 3
+            [ (gogoproto.jsontag) = "add_participant,omitempty" ];
+        SessionTrackerRemoveParticipant RemoveParticipant = 4
             [ (gogoproto.jsontag) = "remove_participant,omitempty" ];
     }
 }
 
+// PresenceMFAChallengeRequest is a request for a presence MFA challenge.
 message PresenceMFAChallengeRequest {
     // SessionID is unique identifier of the session you want to request presence for.
     string SessionID = 1 [ (gogoproto.jsontag) = "session_id,omitempty" ];
 }
 
+// PresenceMFAChallengeSend is a presence challenge request or response.
 message PresenceMFAChallengeSend {
     oneof Request {
         PresenceMFAChallengeRequest ChallengeRequest = 1;
@@ -1531,20 +1537,20 @@ service AuthService {
     rpc MaintainSessionPresence(stream PresenceMFAChallengeSend)
         returns (stream MFAAuthenticateChallenge);
 
-    // CreateSession creates a new session resource.
-    rpc CreateSession(CreateSessionRequest) returns (types.SessionTrackerV1);
+    // CreateSessionTracker creates a new session tracker resource.
+    rpc CreateSessionTracker(CreateSessionTrackerRequest) returns (types.SessionTrackerV1);
 
-    // GetSessionRequest fetches a session resource.
-    rpc GetSession(GetSessionRequest) returns (types.SessionTrackerV1);
+    // GetSessionTrackerRequest fetches a session tracker resource.
+    rpc GetSessionTracker(GetSessionTrackerRequest) returns (types.SessionTrackerV1);
 
-    // GetActiveSessions returns a list of active sessions.
-    rpc GetActiveSessions(google.protobuf.Empty) returns (GetActiveSessionsResponse);
+    // GetActiveSessionTrackers returns a list of active sessions.
+    rpc GetActiveSessionTrackers(google.protobuf.Empty) returns (GetActiveSessionTrackersResponse);
 
-    // RemoveSession removes a session resource.
-    rpc RemoveSession(RemoveSessionRequest) returns (google.protobuf.Empty);
+    // RemoveSessionTracker removes a session tracker resource.
+    rpc RemoveSessionTracker(RemoveSessionTrackerRequest) returns (google.protobuf.Empty);
 
-    // UpdateSession updates some state of a session.
-    rpc UpdateSession(UpdateSessionRequest) returns (google.protobuf.Empty);
+    // UpdateSessionTracker updates some state of a session tracker.
+    rpc UpdateSessionTracker(UpdateSessionTrackerRequest) returns (google.protobuf.Empty);
 
     // SendKeepAlives allows node to send a stream of keep alive requests
     rpc SendKeepAlives(stream types.KeepAlive) returns (google.protobuf.Empty);

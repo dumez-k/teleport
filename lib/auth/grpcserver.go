@@ -3580,8 +3580,8 @@ func (g *GRPCServer) ListResources(ctx context.Context, req *proto.ListResources
 	return resp, nil
 }
 
-// CreateSession creates a tracker resource for an active session.
-func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSessionRequest) (*types.SessionTrackerV1, error) {
+// CreateSessionTracker creates a tracker resource for an active session.
+func (g *GRPCServer) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (*types.SessionTrackerV1, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -3599,8 +3599,8 @@ func (g *GRPCServer) CreateSession(ctx context.Context, req *proto.CreateSession
 	return defined, nil
 }
 
-// GetSession returns the current state of a session tracker for an active session.
-func (g *GRPCServer) GetSession(ctx context.Context, req *proto.GetSessionRequest) (*types.SessionTrackerV1, error) {
+// GetSessionTracker returns the current state of a session tracker for an active session.
+func (g *GRPCServer) GetSessionTracker(ctx context.Context, req *proto.GetSessionTrackerRequest) (*types.SessionTrackerV1, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -3618,8 +3618,8 @@ func (g *GRPCServer) GetSession(ctx context.Context, req *proto.GetSessionReques
 	return defined, nil
 }
 
-// GetActiveSessions returns a list of active session trackers.
-func (g *GRPCServer) GetActiveSessions(ctx context.Context, req *empty.Empty) (*proto.GetActiveSessionsResponse, error) {
+// GetActiveSessionTrackers returns a list of active session trackers.
+func (g *GRPCServer) GetActiveSessionTrackers(ctx context.Context, req *empty.Empty) (*proto.GetActiveSessionTrackersResponse, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -3639,11 +3639,11 @@ func (g *GRPCServer) GetActiveSessions(ctx context.Context, req *empty.Empty) (*
 		definedArr = append(definedArr, defined)
 	}
 
-	return &proto.GetActiveSessionsResponse{Sessions: definedArr}, nil
+	return &proto.GetActiveSessionTrackersResponse{Sessions: definedArr}, nil
 }
 
-// RemoveSession removes a tracker resource for an active session.
-func (g *GRPCServer) RemoveSession(ctx context.Context, req *proto.RemoveSessionRequest) (*empty.Empty, error) {
+// RemoveSessionTracker removes a tracker resource for an active session.
+func (g *GRPCServer) RemoveSessionTracker(ctx context.Context, req *proto.RemoveSessionTrackerRequest) (*empty.Empty, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -3655,8 +3655,8 @@ func (g *GRPCServer) RemoveSession(ctx context.Context, req *proto.RemoveSession
 	return &empty.Empty{}, nil
 }
 
-// UpdateSession updates a tracker resource for an active session.
-func (g *GRPCServer) UpdateSession(ctx context.Context, req *proto.UpdateSessionRequest) (*empty.Empty, error) {
+// UpdateSessionTracker updates a tracker resource for an active session.
+func (g *GRPCServer) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) (*empty.Empty, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)

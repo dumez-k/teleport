@@ -2777,20 +2777,12 @@ message RecoveryCode {
 
 // SessionTrackerV1 represents a live session resource.
 message SessionTrackerV1 {
-    // Kind is a resource kind.
-    string Kind = 1 [ (gogoproto.jsontag) = "kind" ];
-
-    // SubKind is an optional resource sub kind, used in some resources.
-    string SubKind = 2 [ (gogoproto.jsontag) = "sub_kind,omitempty" ];
-
-    // Version is version.
-    string Version = 3 [ (gogoproto.jsontag) = "version" ];
-
-    // Metadata is resource metadata.
-    Metadata Metadata = 4 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "metadata" ];
+    // Header is the common resource header.
+    ResourceHeader Header = 1
+        [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true ];
 
     // Spec is a session specification.
-    SessionTrackerSpecV1 Spec = 5 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "spec" ];
+    SessionTrackerSpecV1 Spec = 2 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "spec" ];
 }
 
 // SessionTrackerSpecV1 is the specification for a live session.
@@ -2798,62 +2790,64 @@ message SessionTrackerSpecV1 {
     // SessionID is unique identifier of this session.
     string SessionID = 1 [ (gogoproto.jsontag) = "session_id,omitempty" ];
 
-    // Namespace is a session namespace, separating sessions from each other.
-    string Namespace = 2 [ (gogoproto.jsontag) = "namespace,omitempty" ];
-
-    // Type describes what type of session this is.
-    string Type = 3 [ (gogoproto.jsontag) = "type,omitempty" ];
+    // Kind describes what kind of session this is.
+    string Kind = 2 [ (gogoproto.jsontag) = "kind,omitempty" ];
 
     // State is the current state of this session.
-    SessionState State = 4 [ (gogoproto.jsontag) = "state,omitempty" ];
+    SessionState State = 3 [ (gogoproto.jsontag) = "state,omitempty" ];
 
     // Created encodes the time at which the session was registered with the auth
     // server.
-    google.protobuf.Timestamp Created = 5 [
+    //
+    // This should match the timestamp in the corresponding `session.create` event.
+    // It's thus up to the tracker creator to set the correct timestamp.
+    google.protobuf.Timestamp Created = 4 [
         (gogoproto.stdtime) = true,
         (gogoproto.nullable) = false,
         (gogoproto.jsontag) = "created,omitempty"
     ];
 
     // Expires encodes the time at which this session expires and becomes invalid.
-    google.protobuf.Timestamp Expires = 6 [
+    google.protobuf.Timestamp Expires = 5 [
         (gogoproto.stdtime) = true,
         (gogoproto.nullable) = false,
         (gogoproto.jsontag) = "expires,omitempty"
     ];
 
     // AttachedData is arbitrary attached JSON serialized metadata.
-    string AttachedData = 7 [ (gogoproto.jsontag) = "attached,omitempty" ];
+    string AttachedData = 6 [ (gogoproto.jsontag) = "attached,omitempty" ];
 
     // Reason is an arbitrary string that may be used to describe the session and/or it's
     // purpose.
-    string Reason = 8 [ (gogoproto.jsontag) = "reason,omitempty" ];
+    string Reason = 7 [ (gogoproto.jsontag) = "reason,omitempty" ];
 
     // Invited is a list of invited users, this field is interpreted by different
     // clients on a best-effort basis and used for delivering notifications to invited users.
-    repeated string Invited = 9 [ (gogoproto.jsontag) = "invited,omitempty" ];
+    repeated string Invited = 8 [ (gogoproto.jsontag) = "invited,omitempty" ];
 
-    // Hostname is the address of the target this session is connected to.
-    string Hostname = 10 [ (gogoproto.jsontag) = "target_hostname,omitempty" ];
+    // Hostname identifies the target this session is connected to.
+    string Hostname = 9 [ (gogoproto.jsontag) = "target_hostname,omitempty" ];
 
     // Address is the address of the target this session is connected to.
-    string Address = 11 [ (gogoproto.jsontag) = "target_address,omitempty" ];
+    string Address = 10 [ (gogoproto.jsontag) = "target_address,omitempty" ];
 
-    // ClusterName is the name of cluster that this session belongs to.
-    string ClusterName = 12 [ (gogoproto.jsontag) = "cluster_name,omitempty" ];
+    // ClusterName is the name of the Teleport cluster that this session belongs to.
+    string ClusterName = 11 [ (gogoproto.jsontag) = "cluster_name,omitempty" ];
 
     // Login is the local login/user on the target used by the session.
-    string Login = 13 [ (gogoproto.jsontag) = "login,omitempty" ];
+    string Login = 12 [ (gogoproto.jsontag) = "login,omitempty" ];
 
     // Participants is a list of session participants.
-    repeated Participant Participants = 14 [ (gogoproto.jsontag) = "participants,omitempty" ];
+    repeated Participant Participants = 13 [ (gogoproto.jsontag) = "participants,omitempty" ];
 
     // The Kubernetes cluster this session belongs to.
-    string KubernetesCluster = 15 [ (gogoproto.jsontag) = "kubernetes_cluster,omitempty" ];
+    string KubernetesCluster = 14 [ (gogoproto.jsontag) = "kubernetes_cluster,omitempty" ];
 
     // HostUser is the user regarded as the owner of this session, RBAC checks are performed
     // against the require policies of this user.
-    string HostUser = 16 [ (gogoproto.jsontag) = "host_user,omitempty" ];
+    //
+    // This refers to the Teleport user but may not be the same as the sessions initiator.
+    string HostUser = 15 [ (gogoproto.jsontag) = "host_user,omitempty" ];
 }
 
 // Participant stores information about a participant in the session.

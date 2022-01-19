@@ -45,10 +45,10 @@ type SessionTrackerService interface {
 	GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error)
 
 	// CreateSessionTracker creates a tracker resource for an active session.
-	CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error)
+	CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (types.SessionTracker, error)
 
 	// UpdateSessionTracker updates a tracker resource for an active session.
-	UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error
+	UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error
 
 	// RemoveSessionTracker removes a tracker resource for an active session.
 	RemoveSessionTracker(ctx context.Context, sessionID string) error
@@ -164,13 +164,12 @@ func (s *sessionV2) GetActiveSessionTrackers(ctx context.Context) ([]types.Sessi
 }
 
 // CreateSessionTracker creates a tracker resource for an active session.
-func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
+func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (types.SessionTracker, error) {
 	now := time.Now().UTC()
 
 	spec := types.SessionTrackerSpecV1{
 		SessionID:         req.ID,
-		Namespace:         req.Namespace,
-		Type:              req.Type,
+		Kind:              req.Type,
 		State:             types.SessionState_SessionStatePending,
 		Created:           now,
 		Reason:            req.Reason,
@@ -195,12 +194,12 @@ func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateS
 		return nil, trace.Wrap(err)
 	}
 
-	err = s.addSessionToList(ctx, session.GetID())
+	err = s.addSessionToList(ctx, session.GetSessionID())
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	item := backend.Item{Key: backend.Key(sessionPrefix, session.GetID()), Value: json}
+	item := backend.Item{Key: backend.Key(sessionPrefix, session.GetSessionID()), Value: json}
 	_, err = s.bk.Create(ctx, item)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -210,7 +209,7 @@ func (s *sessionV2) CreateSessionTracker(ctx context.Context, req *proto.CreateS
 }
 
 // UpdateSessionTracker updates a tracker resource for an active session.
-func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
+func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
 	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, req.SessionID))
 	if err != nil {
 		return trace.Wrap(err)
@@ -224,11 +223,11 @@ func (s *sessionV2) UpdateSessionTracker(ctx context.Context, req *proto.UpdateS
 	switch session := session.(type) {
 	case *types.SessionTrackerV1:
 		switch update := req.Update.(type) {
-		case *proto.UpdateSessionRequest_UpdateState:
+		case *proto.UpdateSessionTrackerRequest_UpdateState:
 			session.SetState(update.UpdateState.State)
-		case *proto.UpdateSessionRequest_AddParticipant:
+		case *proto.UpdateSessionTrackerRequest_AddParticipant:
 			session.AddParticipant(update.AddParticipant.Participant)
-		case *proto.UpdateSessionRequest_RemoveParticipant:
+		case *proto.UpdateSessionTrackerRequest_RemoveParticipant:
 			session.RemoveParticipant(update.RemoveParticipant.ParticipantID)
 		}
 	default:

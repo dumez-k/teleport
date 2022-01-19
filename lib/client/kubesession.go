@@ -48,7 +48,7 @@ type KubeSession struct {
 func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionTracker, key *Key, kubeAddr string, tlsServer string, mode types.SessionParticipantMode) (*KubeSession, error) {
 	close := utils.NewCloseBroadcaster()
 	closeWait := &sync.WaitGroup{}
-	joinEndpoint := "wss://" + kubeAddr + "/api/v1/teleport/join/" + meta.GetID()
+	joinEndpoint := "wss://" + kubeAddr + "/api/v1/teleport/join/" + meta.GetSessionID()
 	kubeCluster := meta.GetKubeCluster()
 	ciphers := utils.DefaultCipherSuites()
 	tlsConfig, err := key.KubeClientTLSConfig(ciphers, kubeCluster)
@@ -158,7 +158,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 			cancel()
 		}()
 
-		go runPresenceTask(subCtx, s.term.Stdout(), auth, tc, s.meta.GetID())
+		go runPresenceTask(subCtx, s.term.Stdout(), auth, tc, s.meta.GetSessionID())
 	}
 
 	s.pipeInOut()

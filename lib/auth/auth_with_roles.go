@@ -254,7 +254,7 @@ func hasLocalUserRole(checker services.AccessChecker) bool {
 }
 
 // CreateSessionTracker creates a tracker resource for an active session.
-func (a *ServerWithRoles) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
+func (a *ServerWithRoles) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (types.SessionTracker, error) {
 	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) && !a.hasBuiltinRole(string(types.RoleProxy)) {
 		return nil, trace.AccessDenied("this request can be only executed by a proxy")
 	}
@@ -321,7 +321,7 @@ func (a *ServerWithRoles) RemoveSessionTracker(ctx context.Context, sessionID st
 }
 
 // UpdateSessionTracker updates a tracker resource for an active session.
-func (a *ServerWithRoles) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
+func (a *ServerWithRoles) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
 	if !a.hasBuiltinRole(string(types.RoleKube)) && !a.hasBuiltinRole(string(types.RoleNode)) && !a.hasBuiltinRole(string(types.RoleProxy)) {
 		return trace.AccessDenied("this request can be only executed by a proxy")
 	}

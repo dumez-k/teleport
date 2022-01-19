@@ -2400,21 +2400,21 @@ func (c *Client) GetResources(ctx context.Context, namespace, resourceType strin
 }
 
 // CreateSessionTracker creates a tracker resource for an active session.
-func (c *Client) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
-	resp, err := c.grpc.CreateSession(ctx, req)
+func (c *Client) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (types.SessionTracker, error) {
+	resp, err := c.grpc.CreateSessionTracker(ctx, req)
 	return resp, trail.FromGRPC(err)
 }
 
 // GetSessionTracker returns the current state of a session tracker for an active session.
 func (c *Client) GetSessionTracker(ctx context.Context, sessionID string) (types.SessionTracker, error) {
-	req := &proto.GetSessionRequest{SessionID: sessionID}
-	resp, err := c.grpc.GetSession(ctx, req)
+	req := &proto.GetSessionTrackerRequest{SessionID: sessionID}
+	resp, err := c.grpc.GetSessionTracker(ctx, req)
 	return resp, trail.FromGRPC(err)
 }
 
 // GetActiveSessionTrackers returns a list of active session trackers.
 func (c *Client) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
-	resp, err := c.grpc.GetActiveSessions(ctx, &empty.Empty{})
+	resp, err := c.grpc.GetActiveSessionTrackers(ctx, &empty.Empty{})
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
@@ -2429,13 +2429,13 @@ func (c *Client) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionT
 
 // RemoveSessionTracker removes a tracker resource for an active session.
 func (c *Client) RemoveSessionTracker(ctx context.Context, sessionID string) error {
-	_, err := c.grpc.RemoveSession(ctx, &proto.RemoveSessionRequest{SessionID: sessionID})
+	_, err := c.grpc.RemoveSessionTracker(ctx, &proto.RemoveSessionTrackerRequest{SessionID: sessionID})
 	return trail.FromGRPC(err)
 }
 
 // UpdateSessionTracker updates a tracker resource for an active session.
-func (c *Client) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
-	_, err := c.grpc.UpdateSession(ctx, req)
+func (c *Client) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
+	_, err := c.grpc.UpdateSessionTracker(ctx, req)
 	return trail.FromGRPC(err)
 }
 

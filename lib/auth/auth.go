@@ -2925,7 +2925,7 @@ func (a *Server) GetApp(ctx context.Context, name string) (types.Application, er
 }
 
 // CreateSessionTracker creates a tracker resource for an active session.
-func (a *Server) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionRequest) (types.SessionTracker, error) {
+func (a *Server) CreateSessionTracker(ctx context.Context, req *proto.CreateSessionTrackerRequest) (types.SessionTracker, error) {
 	return a.SessionTrackerService.CreateSessionTracker(ctx, req)
 }
 
@@ -2940,7 +2940,7 @@ func (a *Server) RemoveSessionTracker(ctx context.Context, sessionID string) err
 }
 
 // UpdateSessionTracker updates a tracker resource for an active session.
-func (a *Server) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionRequest) error {
+func (a *Server) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
 	return a.SessionTrackerService.UpdateSessionTracker(ctx, req)
 }
 
