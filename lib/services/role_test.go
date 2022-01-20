@@ -3413,11 +3413,7 @@ func TestRoleSetLockingMode(t *testing.T) {
 
 	missingMode := constants.LockingMode("")
 	newRoleWithLockingMode := func(t *testing.T, mode constants.LockingMode) types.Role {
-<<<<<<< HEAD
-		role, err := types.NewRole(uuid.New().String(), types.RoleSpecV4{Options: types.RoleOptions{Lock: mode}})
-=======
-		role, err := types.NewRole(uuid.New(), types.RoleSpecV5{Options: types.RoleOptions{Lock: mode}})
->>>>>>> 09a8d7739 (roles v5)
+		role, err := types.NewRole(uuid.New().String(), types.RoleSpecV5{Options: types.RoleOptions{Lock: mode}})
 		require.NoError(t, err)
 		return role
 	}
