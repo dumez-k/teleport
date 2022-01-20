@@ -170,13 +170,14 @@ func (e *SessionAccessEvaluator) matchesKind(allow []string) bool {
 
 // CanJoin returns the modes a user has access to join a session with.
 // If the list is empty, the user doesn't have access to join the session at all.
-func (e *SessionAccessEvaluator) CanJoin(user SessionAccessContext) []types.SessionParticipantMode {
-	if !e.isPoisoned() {
-		return []types.SessionParticipantMode{
-			types.SessionObserverMode,
-			types.SessionModeratorMode,
-			types.SessionPeerMode,
-		}
+func (e *SessionAccessEvaluator) CanJoin(user SessionAccessContext) ([]types.SessionParticipantMode, error) {
+	supported, err := e.supportsSessionAccessControls()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	if !supported {
+		return preAccessControlsModes(e.kind), nil
 	}
 
 	var modes []types.SessionParticipantMode
@@ -192,7 +193,7 @@ func (e *SessionAccessEvaluator) CanJoin(user SessionAccessContext) []types.Sess
 		}
 	}
 
-	return modes
+	return modes, nil
 }
 
 func SliceContainsMode(s []types.SessionParticipantMode, e types.SessionParticipantMode) bool {
@@ -211,7 +212,12 @@ type PolicyOptions struct {
 
 // FulfilledFor checks if a given session may run with a list of participants.
 func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContext) (bool, PolicyOptions, error) {
-	if len(e.requires) == 0 || !e.isPoisoned() {
+	supported, err := e.supportsSessionAccessControls()
+	if err != nil {
+		return false, PolicyOptions{}, trace.Wrap(err)
+	}
+
+	if len(e.requires) == 0 || !supported {
 		return true, PolicyOptions{}, nil
 	}
 
@@ -252,20 +258,33 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 	return false, PolicyOptions{}, nil
 }
 
-// isPoisoned checks if a set of roles contains any v5 roles.
-// If a set only has v4 or earlier roles, we don't want to apply the access checks
-// to ssh sessions.
+// supportsSessionAccessControls checks if moderated sessions-style access controls can be applied to the session.
+// If a set only has v4 or earlier roles, we don't want to apply the access checks to SSH sessions.
 //
-// This only applies to ssh sessions since they previously had no access control for joining sessions.
+// This only applies to SSH sessions since they previously had no access control for joining sessions.
 // We don't need this fallback behaviour for multiparty kubernetes since it's a new feature.
-func (e *SessionAccessEvaluator) isPoisoned() bool {
+func (e *SessionAccessEvaluator) supportsSessionAccessControls() (bool, error) {
 	if e.kind == types.SSHSessionKind {
 		for _, role := range e.roles {
-			if role.GetVersion() == types.V5 {
-				return true
+			switch role.GetVersion() {
+			case types.V1, types.V2, types.V3, types.V4:
+				return false, nil
+			case types.V5:
+				return true, nil
+			default:
+				return false, trace.BadParameter("unsupported role version: %v", role.GetVersion())
 			}
 		}
 	}
 
-	return false
+	return false, nil
+}
+
+func preAccessControlsModes(kind types.SessionKind) []types.SessionParticipantMode {
+	switch kind {
+	case types.SSHSessionKind:
+		return []types.SessionParticipantMode{types.SessionPeerMode}
+	default:
+		return nil
+	}
 }

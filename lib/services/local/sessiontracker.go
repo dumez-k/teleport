@@ -153,13 +153,13 @@ func (s *sessionTracker) CreateSessionTracker(ctx context.Context, req *proto.Cr
 		Address:           req.Address,
 		ClusterName:       req.ClusterName,
 		Login:             req.Login,
-		Participants:      []*types.Participant{req.Initiator},
+		Participants:      []types.Participant{*req.Initiator},
 		Expires:           req.Expires,
 		KubernetesCluster: req.KubernetesCluster,
 		HostUser:          req.HostUser,
 	}
 
-	session, err := types.NewSession(spec)
+	session, err := types.NewSessionTracker(spec)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -201,7 +201,7 @@ func (s *sessionTracker) UpdateSessionTracker(ctx context.Context, req *proto.Up
 		case *proto.UpdateSessionTrackerRequest_UpdateState:
 			session.SetState(update.UpdateState.State)
 		case *proto.UpdateSessionTrackerRequest_AddParticipant:
-			session.AddParticipant(update.AddParticipant.Participant)
+			session.AddParticipant(*update.AddParticipant.Participant)
 		case *proto.UpdateSessionTrackerRequest_RemoveParticipant:
 			session.RemoveParticipant(update.RemoveParticipant.ParticipantID)
 		}

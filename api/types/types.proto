@@ -2838,7 +2838,8 @@ message SessionTrackerSpecV1 {
     string Login = 12 [ (gogoproto.jsontag) = "login,omitempty" ];
 
     // Participants is a list of session participants.
-    repeated Participant Participants = 13 [ (gogoproto.jsontag) = "participants,omitempty" ];
+    repeated Participant Participants = 13
+        [ (gogoproto.jsontag) = "participants,omitempty", (gogoproto.nullable) = false ];
 
     // The Kubernetes cluster this session belongs to.
     string KubernetesCluster = 14 [ (gogoproto.jsontag) = "kubernetes_cluster,omitempty" ];

@@ -77,10 +77,10 @@ type SessionTracker interface {
 	GetLogin() string
 
 	// GetParticipants returns the list of participants in the session.
-	GetParticipants() []*Participant
+	GetParticipants() []Participant
 
 	// AddParticipant adds a participant to the session tracker.
-	AddParticipant(*Participant)
+	AddParticipant(Participant)
 
 	// RemoveParticipant removes a participant from the session tracker.
 	RemoveParticipant(string) error
@@ -96,7 +96,7 @@ type SessionTracker interface {
 	GetHostUser() string
 }
 
-func NewSession(spec SessionTrackerSpecV1) (SessionTracker, error) {
+func NewSessionTracker(spec SessionTrackerSpecV1) (SessionTracker, error) {
 	meta := Metadata{
 		Name: spec.SessionID,
 	}
@@ -202,15 +202,11 @@ func (s *SessionTrackerV1) GetState() SessionState {
 // SetState sets the state of the session.
 func (s *SessionTrackerV1) SetState(state SessionState) error {
 	switch state {
-	default:
-		return trace.BadParameter("invalid session state: %v", state)
-	case SessionState_SessionStateRunning:
-		fallthrough
-	case SessionState_SessionStatePending:
-		fallthrough
-	case SessionState_SessionStateTerminated:
+	case SessionState_SessionStateRunning, SessionState_SessionStatePending, SessionState_SessionStateTerminated:
 		s.Spec.State = state
 		return nil
+	default:
+		return trace.BadParameter("invalid session state: %v", state)
 	}
 }
 
@@ -255,12 +251,12 @@ func (s *SessionTrackerV1) GetLogin() string {
 }
 
 // GetParticipants returns a list of participants in the session.
-func (s *SessionTrackerV1) GetParticipants() []*Participant {
+func (s *SessionTrackerV1) GetParticipants() []Participant {
 	return s.Spec.Participants
 }
 
 // AddParticipant adds a participant to the session tracker.
-func (s *SessionTrackerV1) AddParticipant(participant *Participant) {
+func (s *SessionTrackerV1) AddParticipant(participant Participant) {
 	s.Spec.Participants = append(s.Spec.Participants, participant)
 }
 
@@ -273,7 +269,7 @@ func (s *SessionTrackerV1) RemoveParticipant(id string) error {
 		}
 	}
 
-	return trace.BadParameter("participant %v not found", id)
+	return trace.NotFound("participant %v not found", id)
 }
 
 // GetKubeCluster returns the name of the kubernetes cluster the session is running in.
@@ -298,5 +294,5 @@ func (s *SessionTrackerV1) UpdatePresence(user string) error {
 		}
 	}
 
-	return trace.BadParameter("participant %v not found", user)
+	return trace.NotFound("participant %v not found", user)
 }
