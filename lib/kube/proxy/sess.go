@@ -36,7 +36,6 @@ import (
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/kube/proxy/streamproto"
-	kubeutils "github.com/gravitational/teleport/lib/kube/utils"
 	tsession "github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/srv"
 	"github.com/gravitational/teleport/lib/utils"
@@ -867,9 +866,7 @@ func (s *session) join(p *party) error {
 		return trace.Wrap(err)
 	}
 
-	stdout := kubeutils.WriterCloserWrapper{Writer: p.Client.stdoutStream()}
-	s.io.AddWriter(stringId, stdout)
-
+	s.io.AddWriter(stringId, p.Client.stdoutStream())
 	if p.Mode != types.SessionObserverMode {
 		go func() {
 			c := p.Client.forceTerminate()
