@@ -1474,12 +1474,6 @@ message GetSessionTrackerRequest {
     string SessionID = 1 [ (gogoproto.jsontag) = "session_id,omitempty" ];
 }
 
-// GetActiveSessionTrackersResponse is a response containing active sessions.
-message GetActiveSessionTrackersResponse {
-    // Sessions is a list of active sessions.
-    repeated types.SessionTrackerV1 Sessions = 1;
-}
-
 // RemoveSessionTrackerRequest is a request to remove a session.
 message RemoveSessionTrackerRequest {
     // SessionID is unique identifier of this session.
@@ -1544,7 +1538,7 @@ service AuthService {
     rpc GetSessionTracker(GetSessionTrackerRequest) returns (types.SessionTrackerV1);
 
     // GetActiveSessionTrackers returns a list of active sessions.
-    rpc GetActiveSessionTrackers(google.protobuf.Empty) returns (GetActiveSessionTrackersResponse);
+    rpc GetActiveSessionTrackers(google.protobuf.Empty) returns (stream types.SessionTrackerV1);
 
     // RemoveSessionTracker removes a session tracker resource.
     rpc RemoveSessionTracker(RemoveSessionTrackerRequest) returns (google.protobuf.Empty);

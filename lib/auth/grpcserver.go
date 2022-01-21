@@ -3623,27 +3623,30 @@ func (g *GRPCServer) GetSessionTracker(ctx context.Context, req *proto.GetSessio
 }
 
 // GetActiveSessionTrackers returns a list of active session trackers.
-func (g *GRPCServer) GetActiveSessionTrackers(ctx context.Context, req *empty.Empty) (*proto.GetActiveSessionTrackersResponse, error) {
+func (g *GRPCServer) GetActiveSessionTrackers(_ *empty.Empty, stream proto.AuthService_GetActiveSessionTrackersServer) error {
+	ctx := stream.Context()
 	auth, err := g.authenticate(ctx)
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return trace.Wrap(err)
 	}
 	sessions, err := auth.ServerWithRoles.GetActiveSessionTrackers(ctx)
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return trace.Wrap(err)
 	}
 
-	var definedArr []*types.SessionTrackerV1
 	for _, session := range sessions {
 		defined, ok := session.(*types.SessionTrackerV1)
 		if !ok {
-			return nil, trace.BadParameter("unexpected session type %T", session)
+			return trace.BadParameter("unexpected session type %T", session)
 		}
 
-		definedArr = append(definedArr, defined)
+		err := stream.Send(defined)
+		if err != nil {
+			return trace.Wrap(err)
+		}
 	}
 
-	return &proto.GetActiveSessionTrackersResponse{Sessions: definedArr}, nil
+	return nil
 }
 
 // RemoveSessionTracker removes a tracker resource for an active session.
