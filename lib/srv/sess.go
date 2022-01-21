@@ -323,7 +323,7 @@ func (s *SessionRegistry) ForceTerminate(ctx *ServerContext) error {
 	}
 
 	sess.terminated = true
-	sess.out.BroadcastMessage("Forcefully terminating session...")
+	sess.io.BroadcastMessage("Forcefully terminating session...")
 	start, end := sess.startTime, time.Now().UTC()
 
 	// Emit a session.end event for this (interactive) session.
@@ -579,8 +579,7 @@ type session struct {
 	// participants at the end of a session.
 	participants map[rsession.ID]*party
 
-	out      *TermManager
-	in       *BreakReader
+	io       *TermManager
 	inWriter io.Writer
 
 	term Terminal
@@ -748,7 +747,7 @@ func (s *session) Close() error {
 		// because of closeOnce
 		go func() {
 			close(s.closeC)
-			s.out.BroadcastMessage("Closing session...")
+			s.io.BroadcastMessage("Closing session...")
 			s.log.Infof("Closing session %v.", s.id)
 			err := s.trackerUpdateState(types.SessionState_SessionStateTerminated)
 			if s.term != nil {
@@ -784,9 +783,8 @@ func (s *session) isLingering() bool {
 }
 
 func (s *session) waitOnAccess() error {
-	s.out.W.Off()
-	s.in.Off()
-	err := s.out.BroadcastMessage("Session paused, Waiting for required participants...")
+	s.io.Off()
+	err := s.io.BroadcastMessage("Session paused, Waiting for required participants...")
 	if err != nil {
 		log.WithError(err).Errorf("Failed to broadcast message.")
 	}
@@ -813,14 +811,13 @@ outer:
 		}
 	}
 
-	s.out.BroadcastMessage("Resuming session...")
-	s.out.W.On()
-	s.in.On()
+	s.io.BroadcastMessage("Resuming session...")
+	s.io.On()
 	return nil
 }
 
 func (s *session) launch(ctx *ServerContext) error {
-	s.out.BroadcastMessage("Launching session...")
+	s.io.BroadcastMessage("Launching session...")
 	s.stateUpdate.Submit(types.SessionState_SessionStateRunning)
 
 	// If the identity is verified with an MFA device, we enabled MFA-based presence for the session.
@@ -920,7 +917,7 @@ func (s *session) launch(ctx *ServerContext) error {
 	go func() {
 		defer s.term.AddParty(-1)
 
-		_, err := io.Copy(s.out, s.term.PTY())
+		_, err := io.Copy(s.io, s.term.PTY())
 		s.log.Debugf("Copying from PTY to writer completed with error %v.", err)
 
 		// once everything has been copied, notify the goroutine below. if this code
@@ -934,7 +931,7 @@ func (s *session) launch(ctx *ServerContext) error {
 	s.term.AddParty(1)
 	go func() {
 		defer s.term.AddParty(-1)
-		_, err := io.Copy(s.term.PTY(), s.in)
+		_, err := io.Copy(s.term.PTY(), s.io)
 		s.log.Debugf("Copying from reader to PTY completed with error %v.", err)
 	}()
 
@@ -1028,12 +1025,12 @@ func (s *session) startInteractive(ch ssh.Channel, ctx *ServerContext) error {
 			return trace.Wrap(err)
 		}
 	}
-	s.out = NewTermManager(NewSwitchWriter(utils.NewTrackingWriter(NewMultiWriter())))
+	s.io = NewTermManager()
 	inReader, inWriter := io.Pipe()
 	s.inWriter = inWriter
-	s.in = NewBreakReader(utils.NewTrackingReader(inReader))
-	s.out.W.W.W.(*MultiWriter).AddWriter("session-recorder", utils.WriteCloserWithContext(ctx.srv.Context(), s.recorder), true)
-	err = s.out.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", s.id))
+	s.io.AddReader("reader", inReader)
+	s.io.AddWriter("session-recorder", utils.WriteCloserWithContext(ctx.srv.Context(), s.recorder))
+	err = s.io.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", s.id))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1316,8 +1313,8 @@ func (s *session) removeParty(p *party) error {
 		go s.waitOnAccess()
 	}
 
-	s.out.W.W.W.(*MultiWriter).DeleteWriter(string(p.id))
-	s.out.BroadcastMessage(fmt.Sprintf("User %v left the session.", p.user))
+	s.io.DeleteWriter(string(p.id))
+	s.io.BroadcastMessage(fmt.Sprintf("User %v left the session.", p.user))
 	return nil
 }
 
@@ -1494,16 +1491,16 @@ func (s *session) addParty(p *party, mode types.SessionParticipantMode) error {
 
 	// Write last chunk (so the newly joined parties won't stare at a blank
 	// screen).
-	if _, err := p.Write(s.out.W.W.W.(*MultiWriter).GetRecentWrites()); err != nil {
+	if _, err := p.Write(s.io.GetRecentHistory()); err != nil {
 		return trace.Wrap(err)
 	}
 
 	// Register this party as one of the session writers (output will go to it).
-	s.out.W.W.W.(*MultiWriter).AddWriter(string(p.id), p, true)
+	s.io.AddWriter(string(p.id), p)
 	p.ctx.AddCloser(p)
 	s.term.AddParty(1)
 
-	s.out.BroadcastMessage(fmt.Sprintf("User %v joined the session.", p.user))
+	s.io.BroadcastMessage(fmt.Sprintf("User %v joined the session.", p.user))
 	s.log.Infof("New party %v joined session: %v", p.String(), s.id)
 
 	if mode == types.SessionPeerMode {

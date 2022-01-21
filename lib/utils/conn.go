@@ -151,13 +151,13 @@ func (s *TrackingConn) Write(b []byte) (n int, err error) {
 // TrackingReader is an io.Reader that counts the total number of bytes read.
 // It's thread-safe if the underlying io.Reader is thread-safe.
 type TrackingReader struct {
-	R     io.Reader
+	r     io.Reader
 	count uint64
 }
 
 // NewTrackingReader creates a TrackingReader around r.
 func NewTrackingReader(r io.Reader) *TrackingReader {
-	return &TrackingReader{R: r}
+	return &TrackingReader{r: r}
 }
 
 // Count returns the total number of bytes read so far.
@@ -166,7 +166,7 @@ func (r *TrackingReader) Count() uint64 {
 }
 
 func (r *TrackingReader) Read(b []byte) (int, error) {
-	n, err := r.R.Read(b)
+	n, err := r.r.Read(b)
 	atomic.AddUint64(&r.count, uint64(n))
 	return n, trace.Wrap(err)
 }
@@ -175,13 +175,13 @@ func (r *TrackingReader) Read(b []byte) (int, error) {
 // written.
 // It's thread-safe if the underlying io.Writer is thread-safe.
 type TrackingWriter struct {
-	W     io.Writer
+	w     io.Writer
 	count uint64
 }
 
 // NewTrackingWriter creates a TrackingWriter around w.
 func NewTrackingWriter(w io.Writer) *TrackingWriter {
-	return &TrackingWriter{W: w}
+	return &TrackingWriter{w: w}
 }
 
 // Count returns the total number of bytes written so far.
@@ -190,7 +190,7 @@ func (w *TrackingWriter) Count() uint64 {
 }
 
 func (w *TrackingWriter) Write(b []byte) (int, error) {
-	n, err := w.W.Write(b)
+	n, err := w.w.Write(b)
 	atomic.AddUint64(&w.count, uint64(n))
 	return n, trace.Wrap(err)
 }

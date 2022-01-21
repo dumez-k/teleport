@@ -15,35 +15,140 @@
 package srv
 
 import (
+	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gravitational/trace"
+	log "github.com/sirupsen/logrus"
 )
 
-// TermManager handles the output stream of sessions.
-// It deals with tasks like stream manipulation in order to enable message injection.
+const MAX_HISTORY = 1000
+
+// TermManager handles the streams of terminal-like sessions.
+// It performs a number of tasks including:
+// - multiplexing
+// - history scrollback for new clients
+// - stream breaking
 type TermManager struct {
-	mu sync.Mutex
-	W  *SwitchWriter
+	mu           sync.Mutex
+	writers      map[string]io.Writer
+	readerState  map[string]*int32
+	OnWriteError func(idString string, err error)
+	countWritten uint64
+	countRead    uint64
+	// buffer is used to buffer writes when turned off
+	buffer []byte
+	on     bool
+	// history is used to store the scrollback history sent to new clients
+	history []byte
+	// incoming is a stream of incoming stdin data
+	incoming chan []byte
+	// remaining is a partially read chunk of stdin data
+	// we only support one concurrent reader so this isn't mutex protected
+	remaining       []byte
+	readStateUpdate *sync.Cond
+	closed          *int32
 }
 
 // NewTermManager creates a new TermManager.
-func NewTermManager(w *SwitchWriter) *TermManager {
+func NewTermManager() *TermManager {
 	return &TermManager{
-		W: w,
+		writers:     make(map[string]io.Writer),
+		readerState: make(map[string]*int32),
+		closed:      new(int32),
 	}
+}
+
+func (g *TermManager) writeToClients(p []byte) int {
+	g.history = append(g.history, p...)
+	g.history = g.history[:MAX_HISTORY]
+	atomic.AddUint64(&g.countWritten, uint64(len(p)))
+
+	for key, w := range g.writers {
+		_, err := w.Write(p)
+		if err != nil {
+			if err != io.EOF {
+				log.Warnf("Failed to write to remote terminal: %v", err)
+			}
+
+			g.OnWriteError(key, err)
+		}
+
+		delete(g.writers, key)
+	}
+
+	return len(p)
 }
 
 func (g *TermManager) Write(p []byte) (int, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	count, err := g.W.Write(p)
-	if err != nil {
-		return 0, trace.Wrap(err)
+	if g.on {
+		g.writeToClients(p)
+	} else {
+		g.buffer = append(g.buffer, p...)
 	}
 
-	return count, nil
+	return len(p), nil
+}
+
+func (g *TermManager) Read(p []byte) (int, error) {
+	if len(g.remaining) > 0 {
+		n := copy(p, g.remaining)
+		g.remaining = g.remaining[n:]
+		return n, nil
+	}
+
+	q := make(chan struct{})
+	c := make(chan bool)
+	go func() {
+		g.readStateUpdate.L.Lock()
+
+	outer:
+		for {
+			g.mu.Lock()
+			on := g.on
+			g.mu.Unlock()
+
+			select {
+			case c <- on:
+			case <-q:
+				close(c)
+				break outer
+			}
+
+			g.readStateUpdate.Wait()
+		}
+
+		g.readStateUpdate.L.Unlock()
+	}()
+
+	on := <-c
+	for {
+		if !on {
+			on = <-c
+			continue
+		}
+
+		select {
+		case on = <-c:
+			continue
+		case g.remaining = <-g.incoming:
+			close(q)
+			n := copy(p, g.remaining)
+			g.remaining = g.remaining[n:]
+			return n, nil
+		}
+	}
+}
+
+// WriteUnconditional allows unconditional writes to the underlying writers.
+func (g *TermManager) WriteUnconditional(p []byte) (int, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.writeToClients(p), nil
 }
 
 // BroadcastMessage injects a message into the stream.
@@ -52,6 +157,84 @@ func (g *TermManager) BroadcastMessage(message string) error {
 	defer g.mu.Unlock()
 
 	data := []byte("\nTeleport > " + message + "\n")
-	_, err := g.W.WriteUnconditional(data)
+	_, err := g.WriteUnconditional(data)
 	return trace.Wrap(err)
+}
+
+// On allows data to flow through the manager.
+func (g *TermManager) On() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.on = true
+	g.readStateUpdate.Broadcast()
+	_, err := g.WriteUnconditional(g.buffer)
+	return trace.Wrap(err)
+}
+
+// Off buffers incoming writes and reads until turned on again.
+func (g *TermManager) Off() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.on = false
+	g.readStateUpdate.Broadcast()
+}
+
+func (g *TermManager) AddWriter(name string, w io.Writer) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.writers[name] = w
+}
+
+func (g *TermManager) DeleteWriter(name string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.writers, name)
+}
+
+func (g *TermManager) AddReader(name string, r io.Reader) {
+	readerState := new(int32)
+	g.readerState[name] = readerState
+
+	go func() {
+		for {
+			buf := make([]byte, 1024)
+			n, err := r.Read(buf)
+			if err != nil {
+				log.Warnf("Failed to read from remote terminal: %v", err)
+				g.DeleteReader(name)
+				return
+			}
+
+			g.incoming <- buf[:n]
+			if atomic.LoadInt32(g.closed) == 1 || atomic.LoadInt32(readerState) == 1 {
+				return
+			}
+		}
+	}()
+}
+
+func (g *TermManager) DeleteReader(name string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	atomic.StoreInt32(g.readerState[name], 1)
+}
+
+func (g *TermManager) CountWritten() uint64 {
+	return atomic.LoadUint64(&g.countWritten)
+}
+
+func (g *TermManager) CountRead() uint64 {
+	return atomic.LoadUint64(&g.countRead)
+}
+
+func (g *TermManager) Close() {
+	atomic.StoreInt32(g.closed, 1)
+}
+
+func (g *TermManager) GetRecentHistory() []byte {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	data := make([]byte, len(g.history))
+	data = append(data, g.history...)
+	return data
 }

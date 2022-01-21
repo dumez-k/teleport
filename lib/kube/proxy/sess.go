@@ -268,11 +268,7 @@ type session struct {
 
 	log *log.Entry
 
-	clients_stdin *srv.BreakReader
-
-	clients_stdout *srv.TermManager
-
-	clients_stderr *srv.SwitchWriter
+	io *srv.TermManager
 
 	terminalSizeQueue *multiResizeQueue
 
@@ -320,9 +316,9 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 	}
 
 	accessEvaluator := auth.NewSessionAccessEvaluator(roles, types.KubernetesSessionKind)
-	stdout := srv.NewTermManager(srv.NewSwitchWriter(utils.NewTrackingWriter(srv.NewMultiWriter())))
 
-	err = stdout.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", id.String()))
+	io := srv.NewTermManager()
+	err = io.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", id.String()))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -337,9 +333,7 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 		parties:           make(map[uuid.UUID]*party),
 		partiesHistorical: make(map[uuid.UUID]*party),
 		log:               log,
-		clients_stdin:     srv.NewBreakReader(utils.NewTrackingReader(srv.NewMultiReader())),
-		clients_stdout:    stdout,
-		clients_stderr:    srv.NewSwitchWriter(utils.NewTrackingWriter(srv.NewMultiWriter())),
+		io:                io,
 		state:             types.SessionState_SessionStatePending,
 		stateUpdate:       broadcast.NewBroadcaster(1),
 		accessEvaluator:   accessEvaluator,
@@ -365,10 +359,8 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 // waitOnAccess puts the session in pending mode and waits for the session
 // to fulfill the access requirements again.
 func (s *session) waitOnAccess() {
-	s.clients_stdin.Off()
-	s.clients_stdout.W.Off()
-	s.clients_stderr.Off()
-	s.clients_stdout.BroadcastMessage("Session paused, Waiting for required participants...")
+	s.io.Off()
+	s.io.BroadcastMessage("Session paused, Waiting for required participants...")
 
 	c := make(chan interface{})
 	s.stateUpdate.Register(c)
@@ -388,10 +380,8 @@ outer:
 		}
 	}
 
-	s.clients_stdout.BroadcastMessage("Resuming session...")
-	s.clients_stdin.On()
-	s.clients_stdout.W.On()
-	s.clients_stderr.On()
+	s.io.BroadcastMessage("Resuming session...")
+	s.io.On()
 }
 
 // checkPresence checks the presence timestamp of involved moderators
@@ -438,7 +428,7 @@ func (s *session) launch() error {
 		case <-time.After(time.Until(s.expires)):
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			s.clients_stdout.BroadcastMessage("Session expired, closing...")
+			s.io.BroadcastMessage("Session expired, closing...")
 
 			err := s.Close()
 			if err != nil {
@@ -474,7 +464,7 @@ func (s *session) launch() error {
 	s.log.Debugf("Launching session: %v", s.id)
 	s.mu.Lock()
 
-	s.clients_stdout.BroadcastMessage("Launching session...")
+	s.io.BroadcastMessage("Launching session...")
 	q := s.req.URL.Query()
 	request := remoteCommandRequest{
 		podNamespace:       s.params.ByName("podNamespace"),
@@ -505,8 +495,7 @@ func (s *session) launch() error {
 	}
 
 	eventPodMeta := request.eventPodMeta(request.context, s.sess.creds)
-
-	onWriterError := func(idString string, err error) {
+	s.io.OnWriteError = func(idString string, err error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.log.Errorf("Encountered error: %v with party %v. Disconnecting them from the session.", err, idString)
@@ -518,9 +507,6 @@ func (s *session) launch() error {
 			}
 		}
 	}
-
-	s.clients_stdout.W.W.W.(*srv.MultiWriter).OnError = onWriterError
-	s.clients_stderr.W.W.(*srv.MultiWriter).OnError = onWriterError
 
 	if !s.sess.noAuditEvents && s.tty {
 		s.terminalSizeQueue.callback = func(resize *remotecommand.TerminalSize) {
@@ -602,8 +588,7 @@ func (s *session) launch() error {
 			return trace.Wrap(err)
 		}
 
-		s.clients_stdout.W.W.W.(*srv.MultiWriter).AddWriter("recorder", kubeutils.WriterCloserWrapper{Writer: recorder}, false)
-		s.clients_stderr.W.W.(*srv.MultiWriter).AddWriter("recorder", kubeutils.WriterCloserWrapper{Writer: recorder}, false)
+		s.io.AddWriter("recorder", recorder)
 	} else if !s.sess.noAuditEvents {
 		s.emitter = s.forwarder.cfg.StreamEmitter
 	}
@@ -691,9 +676,9 @@ func (s *session) launch() error {
 					Protocol:   events.EventProtocolKube,
 				},
 				// Bytes transmitted from user to pod.
-				BytesTransmitted: s.clients_stdin.R.Count(),
+				BytesTransmitted: s.io.CountRead(),
 				// Bytes received from pod by user.
-				BytesReceived: s.clients_stdout.W.W.Count() + s.clients_stderr.W.Count(),
+				BytesReceived: s.io.CountWritten(),
 			}
 
 			if err := s.emitter.EmitAuditEvent(s.forwarder.ctx, sessionDataEvent); err != nil {
@@ -786,9 +771,9 @@ func (s *session) launch() error {
 	}()
 
 	options := remotecommand.StreamOptions{
-		Stdin:             s.clients_stdin,
-		Stdout:            s.clients_stdout,
-		Stderr:            s.clients_stderr,
+		Stdin:             s.io,
+		Stdout:            s.io,
+		Stderr:            s.io,
 		Tty:               request.tty,
 		TerminalSizeQueue: s.terminalSizeQueue,
 	}
@@ -866,27 +851,24 @@ func (s *session) join(p *party) error {
 		s.forwarder.log.WithError(err).Warn("Failed to emit event.")
 	}
 
-	s.clients_stdout.BroadcastMessage(fmt.Sprintf("User %v joined the session.", p.Ctx.User.GetName()))
+	s.io.BroadcastMessage(fmt.Sprintf("User %v joined the session.", p.Ctx.User.GetName()))
 
 	if s.tty {
 		s.terminalSizeQueue.add(stringId, p.Client.resizeQueue())
 	}
 
 	if s.tty && p.Ctx.User.GetName() == s.ctx.User.GetName() {
-		s.clients_stdin.R.R.(*srv.MultiReader).AddReader(stringId, p.Client.stdinStream())
+		s.io.AddReader(stringId, p.Client.stdinStream())
 	}
 
-	recentWrites := s.clients_stdout.W.W.W.(*srv.MultiWriter).GetRecentWrites()
+	recentWrites := s.io.GetRecentHistory()
 	_, err = p.Client.stdoutStream().Write(recentWrites)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	stdout := kubeutils.WriterCloserWrapper{Writer: p.Client.stdoutStream()}
-	s.clients_stdout.W.W.W.(*srv.MultiWriter).AddWriter(stringId, stdout, false)
-
-	stderr := kubeutils.WriterCloserWrapper{Writer: p.Client.stderrStream()}
-	s.clients_stderr.W.W.(*srv.MultiWriter).AddWriter(stringId, stderr, false)
+	s.io.AddWriter(stringId, stdout)
 
 	if p.Mode != types.SessionObserverMode {
 		go func() {
@@ -932,7 +914,7 @@ func (s *session) join(p *party) error {
 	}
 
 	if !canStart {
-		s.clients_stdout.BroadcastMessage("Waiting for required participants...")
+		s.io.BroadcastMessage("Waiting for required participants...")
 	}
 
 	return nil
@@ -953,11 +935,9 @@ func (s *session) leave(id uuid.UUID) error {
 
 	delete(s.parties, id)
 	s.terminalSizeQueue.remove(stringId)
-	s.clients_stdin.R.R.(*srv.MultiReader).RemoveReader(stringId)
-	s.clients_stdout.W.W.W.(*srv.MultiWriter).DeleteWriter(stringId)
-	s.clients_stderr.W.W.(*srv.MultiWriter).DeleteWriter(stringId)
-
-	s.clients_stdout.BroadcastMessage(fmt.Sprintf("User %v left the session.", party.Ctx.User.GetName()))
+	s.io.DeleteReader(stringId)
+	s.io.DeleteWriter(stringId)
+	s.io.BroadcastMessage(fmt.Sprintf("User %v left the session.", party.Ctx.User.GetName()))
 
 	sessionLeaveEvent := &apievents.SessionLeave{
 		Metadata: apievents.Metadata{
@@ -1064,10 +1044,9 @@ func (s *session) Close() error {
 	defer s.mu.Unlock()
 
 	s.closeOnce.Do(func() {
-		s.clients_stdout.BroadcastMessage("Closing session...")
-
+		s.io.BroadcastMessage("Closing session...")
 		s.state = types.SessionState_SessionStateTerminated
-		s.clients_stdin.Close()
+		s.io.Close()
 		s.stateUpdate.Submit(types.SessionState_SessionStateTerminated)
 		s.stateUpdate.Close()
 		err := s.trackerUpdateState(types.SessionState_SessionStateTerminated)
