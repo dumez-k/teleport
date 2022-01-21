@@ -1559,7 +1559,7 @@ func downgradeRole(ctx context.Context, role *types.RoleV5) (*types.RoleV5, erro
 	minSupportedVersionForV4Roles := semver.New(utils.VersionBeforeAlpha("6.2.4"))
 	if clientVersion == nil || clientVersion.LessThan(*minSupportedVersionForV4Roles) {
 		log.Debugf(`Client version "%s" is unknown or less than 6.2.4, converting role to v3`, clientVersionString)
-		downgraded, err := services.DowngradeRoleToV3(role)
+		downgraded, err := services.DowngradeRoleToV4(role)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
