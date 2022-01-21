@@ -38,14 +38,15 @@ const mfaChallengeInterval = time.Second * 30
 type KubeSession struct {
 	stream    *streamproto.SessionStream
 	term      *terminal.Terminal
-	close     *utils.CloseBroadcaster
+	ctx       context.Context
+	closeCtx  context.CancelFunc
 	closeWait *sync.WaitGroup
 	meta      types.SessionTracker
 }
 
 // NewKubeSession joins a live kubernetes session.
-func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionTracker, key *Key, kubeAddr string, tlsServer string, mode types.SessionParticipantMode) (*KubeSession, error) {
-	close := utils.NewCloseBroadcaster()
+func NewKubeSession(ctxBg context.Context, tc *TeleportClient, meta types.SessionTracker, key *Key, kubeAddr string, tlsServer string, mode types.SessionParticipantMode) (*KubeSession, error) {
+	ctx, closeCtx := context.WithCancel(ctxBg)
 	closeWait := &sync.WaitGroup{}
 	joinEndpoint := "wss://" + kubeAddr + "/api/v1/teleport/join/" + meta.GetSessionID()
 	kubeCluster := meta.GetKubeCluster()
@@ -82,7 +83,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 
 	closeWait.Add(1)
 	go func() {
-		<-close.C
+		<-ctx.Done()
 		term.Close()
 		closeWait.Done()
 	}()
@@ -98,7 +99,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 
 		for {
 			select {
-			case <-close.C:
+			case <-ctx.Done():
 				return
 			case size := <-queue:
 				if size == nil {
@@ -137,7 +138,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 		}
 	}()
 
-	s := &KubeSession{stream, term, close, closeWait, meta}
+	s := &KubeSession{stream, term, ctx, closeCtx, closeWait, meta}
 
 	if stream.MFARequired && mode == types.SessionModeratorMode {
 		proxy, err := tc.ConnectToProxy(ctx)
@@ -152,7 +153,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 
 		subCtx, cancel := context.WithCancel(ctx)
 		go func() {
-			<-close.C
+			<-ctx.Done()
 			cancel()
 		}()
 
@@ -166,7 +167,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 // pipeInOut starts background tasks that copy input to and from the terminal.
 func (s *KubeSession) pipeInOut() {
 	go func() {
-		defer s.close.Close()
+		defer s.closeCtx()
 		_, err := io.Copy(s.term.Stdout(), s.stream)
 		if err != nil {
 			fmt.Printf("Error while reading remote stream: %v\n\r", err.Error())
@@ -174,7 +175,7 @@ func (s *KubeSession) pipeInOut() {
 	}()
 
 	go func() {
-		defer s.close.Close()
+		defer s.closeCtx()
 
 		for {
 			buf := make([]byte, 1)
@@ -210,6 +211,6 @@ func (s *KubeSession) Wait() {
 
 // Close sends a close request to the other end and waits it to gracefully terminate the connection.
 func (s *KubeSession) Close() {
-	s.close.Close()
+	s.closeCtx()
 	s.closeWait.Wait()
 }
