@@ -25,6 +25,7 @@ import (
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
+	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
@@ -85,7 +86,7 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 	serverHandshake, ok := handshake.(ServerHandshake)
 
 	if !isClient && !ok {
-		return nil, trace.BadParameter("handshake must be either client or server handshake")
+		return nil, trace.BadParameter("Handshake must be either client or server handshake, got %T", handshake)
 	}
 
 	if isClient {
@@ -95,7 +96,7 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 		}
 
 		if ty != websocket.TextMessage {
-			return nil, trace.Errorf("expected websocket control message, got %v", ty)
+			return nil, trace.Errorf("Expected websocket control message, got %v", ty)
 		}
 
 		var msg metaMessage
@@ -104,7 +105,7 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 		}
 
 		if msg.ServerHandshake == nil {
-			return nil, trace.Errorf("expected websocket server handshake, got %v", msg)
+			return nil, trace.Errorf("Expected websocket server handshake, got %v", msg)
 		}
 
 		s.MFARequired = msg.ServerHandshake.MFARequired
@@ -134,7 +135,7 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 		}
 
 		if ty != websocket.TextMessage {
-			return nil, trace.Errorf("expected websocket control message, got %v", ty)
+			return nil, trace.Errorf("Expected websocket control message, got %v", ty)
 		}
 
 		var msg metaMessage
@@ -143,7 +144,7 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 		}
 
 		if msg.ClientHandshake == nil {
-			return nil, trace.Errorf("expected websocket client handshake, got %v", msg)
+			return nil, trace.Errorf("Expected websocket client handshake")
 		}
 
 		s.Mode = msg.ClientHandshake.Mode
@@ -208,7 +209,13 @@ func (s *SessionStream) Write(data []byte) (int, error) {
 	s.writeSync.Lock()
 	defer s.writeSync.Unlock()
 
-	return len(data), s.conn.WriteMessage(websocket.BinaryMessage, data)
+	err := s.conn.WriteMessage(websocket.BinaryMessage, data)
+
+	if err != nil {
+		return len(data), s.conn.WriteMessage(websocket.BinaryMessage, data)
+	}
+
+	return 0, trace.Wrap(err)
 }
 
 // Resize sends a resize request to the other party.
@@ -257,7 +264,12 @@ func (s *SessionStream) WaitOnClose() {
 // Close closes the stream.
 func (s *SessionStream) Close() error {
 	if !s.closed {
-		s.conn.WriteMessage(websocket.CloseMessage, []byte{})
+		s.closed = true
+
+		err := s.conn.WriteMessage(websocket.CloseMessage, []byte{})
+		if err != nil {
+			log.Warn("Failed to gracefully close websocket connection: %v", err)
+		}
 
 		select {
 		case <-s.CloseC:
