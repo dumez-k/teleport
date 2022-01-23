@@ -46,7 +46,6 @@ type KubeSession struct {
 
 // NewKubeSession joins a live kubernetes session.
 func NewKubeSession(ctxBg context.Context, tc *TeleportClient, meta types.SessionTracker, key *Key, kubeAddr string, tlsServer string, mode types.SessionParticipantMode) (*KubeSession, error) {
-	ctx, closeCtx := context.WithCancel(ctxBg)
 	closeWait := &sync.WaitGroup{}
 	joinEndpoint := "wss://" + kubeAddr + "/api/v1/teleport/join/" + meta.GetSessionID()
 	kubeCluster := meta.GetKubeCluster()
@@ -81,6 +80,7 @@ func NewKubeSession(ctxBg context.Context, tc *TeleportClient, meta types.Sessio
 		return nil, trace.Wrap(err)
 	}
 
+	ctx, closeCtx := context.WithCancel(ctxBg)
 	closeWait.Add(1)
 	go func() {
 		<-ctx.Done()
@@ -94,6 +94,19 @@ func NewKubeSession(ctxBg context.Context, tc *TeleportClient, meta types.Sessio
 		term.InitRaw(true)
 	}
 
+	handleOutgoingResizeEvent(ctx, stream, term)
+	handleIncomingResizeEvent(stream, closeWait, term)
+	s := &KubeSession{stream, term, ctx, closeCtx, closeWait, meta}
+	err = s.handleMFA(ctx, tc, mode)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	s.pipeInOut()
+	return s, nil
+}
+
+func handleOutgoingResizeEvent(ctx context.Context, stream *streamproto.SessionStream, term *terminal.Terminal) {
 	go func() {
 		queue := stream.ResizeQueue()
 
@@ -110,7 +123,9 @@ func NewKubeSession(ctxBg context.Context, tc *TeleportClient, meta types.Sessio
 			}
 		}
 	}()
+}
 
+func handleIncomingResizeEvent(stream *streamproto.SessionStream, closeWait *sync.WaitGroup, term *terminal.Terminal) error {
 	closeWait.Add(1)
 	go func() {
 		defer closeWait.Done()
@@ -138,17 +153,19 @@ func NewKubeSession(ctxBg context.Context, tc *TeleportClient, meta types.Sessio
 		}
 	}()
 
-	s := &KubeSession{stream, term, ctx, closeCtx, closeWait, meta}
+	return nil
+}
 
-	if stream.MFARequired && mode == types.SessionModeratorMode {
+func (s *KubeSession) handleMFA(ctx context.Context, tc *TeleportClient, mode types.SessionParticipantMode) error {
+	if s.stream.MFARequired && mode == types.SessionModeratorMode {
 		proxy, err := tc.ConnectToProxy(ctx)
 		if err != nil {
-			return nil, trace.Wrap(err)
+			return trace.Wrap(err)
 		}
 
-		auth, err := proxy.ConnectToCluster(ctx, meta.GetClustername(), false)
+		auth, err := proxy.ConnectToCluster(ctx, s.meta.GetClustername(), false)
 		if err != nil {
-			return nil, trace.Wrap(err)
+			return trace.Wrap(err)
 		}
 
 		subCtx, cancel := context.WithCancel(ctx)
@@ -160,8 +177,7 @@ func NewKubeSession(ctxBg context.Context, tc *TeleportClient, meta types.Sessio
 		go runPresenceTask(subCtx, s.term.Stdout(), auth, tc, s.meta.GetSessionID())
 	}
 
-	s.pipeInOut()
-	return s, nil
+	return nil
 }
 
 // pipeInOut starts background tasks that copy input to and from the terminal.

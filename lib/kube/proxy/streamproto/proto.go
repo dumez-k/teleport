@@ -229,7 +229,6 @@ func (s *SessionStream) Resize(size *remotecommand.TerminalSize) error {
 
 	s.writeSync.Lock()
 	defer s.writeSync.Unlock()
-
 	return trace.Wrap(s.conn.WriteMessage(websocket.TextMessage, json))
 }
 
