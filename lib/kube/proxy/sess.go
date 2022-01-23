@@ -54,9 +54,9 @@ type remoteClient interface {
 	stdinStream() io.Reader
 	stdoutStream() io.Writer
 	stderrStream() io.Writer
-	resizeQueue() chan *remotecommand.TerminalSize
+	resizeQueue() <-chan *remotecommand.TerminalSize
 	resize(size *remotecommand.TerminalSize) error
-	forceTerminate() chan struct{}
+	forceTerminate() <-chan struct{}
 	sendStatus(error) error
 	io.Closer
 }
@@ -77,7 +77,7 @@ func (p *websocketClientStreams) stderrStream() io.Writer {
 	return p.stream
 }
 
-func (p *websocketClientStreams) resizeQueue() chan *remotecommand.TerminalSize {
+func (p *websocketClientStreams) resizeQueue() <-chan *remotecommand.TerminalSize {
 	return p.stream.ResizeQueue()
 }
 
@@ -85,8 +85,8 @@ func (p *websocketClientStreams) resize(size *remotecommand.TerminalSize) error 
 	return p.stream.Resize(size)
 }
 
-func (p *websocketClientStreams) forceTerminate() chan struct{} {
-	return p.stream.ForceTerminate()
+func (p *websocketClientStreams) forceTerminate() <-chan struct{} {
+	return p.stream.ForceTerminateQueue()
 }
 
 func (p *websocketClientStreams) sendStatus(err error) error {
@@ -131,7 +131,7 @@ func (p *kubeProxyClientStreams) stderrStream() io.Writer {
 	return p.stderr
 }
 
-func (p *kubeProxyClientStreams) resizeQueue() chan *remotecommand.TerminalSize {
+func (p *kubeProxyClientStreams) resizeQueue() <-chan *remotecommand.TerminalSize {
 	ch := make(chan *remotecommand.TerminalSize)
 	go func() {
 		for {
@@ -153,7 +153,7 @@ func (p *kubeProxyClientStreams) resize(size *remotecommand.TerminalSize) error 
 	return trace.Wrap(err)
 }
 
-func (p *kubeProxyClientStreams) forceTerminate() chan struct{} {
+func (p *kubeProxyClientStreams) forceTerminate() <-chan struct{} {
 	return make(chan struct{})
 }
 
@@ -168,14 +168,14 @@ func (p *kubeProxyClientStreams) Close() error {
 
 // multiResizeQueue is a merged queue of multiple terminal size queues.
 type multiResizeQueue struct {
-	queues   map[string]chan *remotecommand.TerminalSize
+	queues   map[string]<-chan *remotecommand.TerminalSize
 	cases    []reflect.SelectCase
 	callback func(*remotecommand.TerminalSize)
 }
 
 func newMultiResizeQueue() *multiResizeQueue {
 	return &multiResizeQueue{
-		queues: make(map[string]chan *remotecommand.TerminalSize),
+		queues: make(map[string]<-chan *remotecommand.TerminalSize),
 	}
 }
 
@@ -189,7 +189,7 @@ func (r *multiResizeQueue) rebuild() {
 	}
 }
 
-func (r *multiResizeQueue) add(id string, queue chan *remotecommand.TerminalSize) {
+func (r *multiResizeQueue) add(id string, queue <-chan *remotecommand.TerminalSize) {
 	r.queues[id] = queue
 	r.rebuild()
 }

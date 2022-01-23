@@ -787,7 +787,7 @@ func (f *Forwarder) join(ctx *authContext, w http.ResponseWriter, req *http.Requ
 	client := &websocketClientStreams{stream}
 	party := newParty(*ctx, stream.Mode, client)
 	go func() {
-		<-stream.CloseC
+		<-stream.Done()
 		session.mu.Lock()
 		defer session.mu.Unlock()
 		session.leave(party.Id)

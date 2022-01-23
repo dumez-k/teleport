@@ -63,12 +63,13 @@ type SessionStream struct {
 
 	// A notification channel for force termination requests.
 	forceTerminate chan struct{}
-	writeSync      sync.Mutex
-	CloseC         chan struct{}
-	closedC        sync.Once
-	closed         bool
-	MFARequired    bool
-	Mode           types.SessionParticipantMode
+
+	writeSync   sync.Mutex
+	done        chan struct{}
+	closedC     sync.Once
+	closed      bool
+	MFARequired bool
+	Mode        types.SessionParticipantMode
 }
 
 // NewSessionStream creates a new session stream.
@@ -77,7 +78,7 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 	s := &SessionStream{
 		conn:           conn,
 		in:             make(chan []byte),
-		CloseC:         make(chan struct{}),
+		done:           make(chan struct{}),
 		resizeQueue:    make(chan *remotecommand.TerminalSize, 1),
 		forceTerminate: make(chan struct{}),
 	}
@@ -157,7 +158,7 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 func (s *SessionStream) readTask() {
 	for {
 		terminated := false
-		defer s.closedC.Do(func() { close(s.CloseC) })
+		defer s.closedC.Do(func() { close(s.done) })
 		ty, data, err := s.conn.ReadMessage()
 		if err != nil {
 			return
@@ -195,7 +196,7 @@ func (s *SessionStream) Read(p []byte) (int, error) {
 	if len(s.currentIn) == 0 {
 		select {
 		case s.currentIn = <-s.in:
-		case <-s.CloseC:
+		case <-s.done:
 			return 0, io.EOF
 		}
 	}
@@ -233,17 +234,17 @@ func (s *SessionStream) Resize(size *remotecommand.TerminalSize) error {
 }
 
 // ResizeQueue returns a channel that will receive resize requests.
-func (s *SessionStream) ResizeQueue() chan *remotecommand.TerminalSize {
+func (s *SessionStream) ResizeQueue() <-chan *remotecommand.TerminalSize {
 	return s.resizeQueue
 }
 
-// ForceTerminate returns the channel used for force termination requests.
-func (s *SessionStream) ForceTerminate() chan struct{} {
+// ForceTerminateQueue returns the channel used for force termination requests.
+func (s *SessionStream) ForceTerminateQueue() <-chan struct{} {
 	return s.forceTerminate
 }
 
-// DoForceTerminate sends a force termination request to the other end.
-func (s *SessionStream) DoForceTerminate() error {
+// ForceTerminate sends a force termination request to the other end.
+func (s *SessionStream) ForceTerminate() error {
 	msg := metaMessage{ForceTerminate: true}
 	json, err := utils.FastMarshal(msg)
 	if err != nil {
@@ -256,9 +257,8 @@ func (s *SessionStream) DoForceTerminate() error {
 	return trace.Wrap(s.conn.WriteMessage(websocket.TextMessage, json))
 }
 
-// WaitOnClose waits until the other end closes the stream.
-func (s *SessionStream) WaitOnClose() {
-	<-s.CloseC
+func (s *SessionStream) Done() <-chan struct{} {
+	return s.done
 }
 
 // Close closes the stream.
@@ -272,7 +272,7 @@ func (s *SessionStream) Close() error {
 		}
 
 		select {
-		case <-s.CloseC:
+		case <-s.done:
 		case <-time.After(time.Second * 5):
 		}
 	}

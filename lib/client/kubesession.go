@@ -193,7 +193,7 @@ func (s *KubeSession) pipeInOut() {
 			// Ctrl-T
 			if buf[0] == 't' {
 				fmt.Print("\n\rForcefully terminated session\n\r")
-				err := s.stream.DoForceTerminate()
+				err := s.stream.ForceTerminate()
 				if err != nil {
 					fmt.Printf("\n\rerror while sending force termination request: %v\n\r", err.Error())
 				}
