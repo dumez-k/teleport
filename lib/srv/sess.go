@@ -704,6 +704,7 @@ func newSession(id rsession.ID, r *SessionRegistry, ctx *ServerContext) (*sessio
 		stateUpdate:     broadcast.NewBroadcaster(1),
 		scx:             ctx,
 		presenceEnabled: ctx.Identity.Certificate.Extensions[teleport.CertExtensionMFAVerified] != "",
+		io:              NewTermManager(),
 	}
 
 	err = sess.trackerCreate(ctx.Identity.TeleportUser)
@@ -1023,7 +1024,7 @@ func (s *session) startInteractive(ch ssh.Channel, ctx *ServerContext) error {
 			return trace.Wrap(err)
 		}
 	}
-	s.io = NewTermManager()
+
 	inReader, inWriter := io.Pipe()
 	s.inWriter = inWriter
 	s.io.AddReader("reader", inReader)
