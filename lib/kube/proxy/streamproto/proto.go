@@ -267,7 +267,7 @@ func (s *SessionStream) Close() error {
 
 		err := s.conn.WriteMessage(websocket.CloseMessage, []byte{})
 		if err != nil {
-			log.Warn("Failed to gracefully close websocket connection: %v", err)
+			log.Warnf("Failed to gracefully close websocket connection: %v", err)
 		}
 
 		select {

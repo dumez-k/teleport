@@ -118,58 +118,58 @@ func NewSessionTracker(spec SessionTrackerSpecV1) (SessionTracker, error) {
 }
 
 // GetVersion returns resource version.
-func (c *SessionTrackerV1) GetVersion() string {
-	return c.Version
+func (s *SessionTrackerV1) GetVersion() string {
+	return s.Version
 }
 
 // GetName returns the name of the resource.
-func (c *SessionTrackerV1) GetName() string {
-	return c.Metadata.Name
+func (s *SessionTrackerV1) GetName() string {
+	return s.Metadata.Name
 }
 
 // SetName sets the name of the resource.
-func (c *SessionTrackerV1) SetName(e string) {
-	c.Metadata.Name = e
+func (s *SessionTrackerV1) SetName(e string) {
+	s.Metadata.Name = e
 }
 
 // SetExpiry sets expiry time for the object.
-func (c *SessionTrackerV1) SetExpiry(expires time.Time) {
-	c.Metadata.SetExpiry(expires)
+func (s *SessionTrackerV1) SetExpiry(expires time.Time) {
+	s.Metadata.SetExpiry(expires)
 }
 
 // Expiry returns object expiry setting.
-func (c *SessionTrackerV1) Expiry() time.Time {
-	return c.Metadata.Expiry()
+func (s *SessionTrackerV1) Expiry() time.Time {
+	return s.Metadata.Expiry()
 }
 
 // GetMetadata returns object metadata.
-func (c *SessionTrackerV1) GetMetadata() Metadata {
-	return c.Metadata
+func (s *SessionTrackerV1) GetMetadata() Metadata {
+	return s.Metadata
 }
 
 // GetResourceID returns resource ID.
-func (c *SessionTrackerV1) GetResourceID() int64 {
-	return c.Metadata.ID
+func (s *SessionTrackerV1) GetResourceID() int64 {
+	return s.Metadata.ID
 }
 
 // SetResourceID sets resource ID.
-func (c *SessionTrackerV1) SetResourceID(id int64) {
-	c.Metadata.ID = id
+func (s *SessionTrackerV1) SetResourceID(id int64) {
+	s.Metadata.ID = id
 }
 
 // GetKind returns resource kind.
-func (c *SessionTrackerV1) GetKind() string {
-	return c.Kind
+func (s *SessionTrackerV1) GetKind() string {
+	return s.Kind
 }
 
 // GetSubKind returns resource subkind.
-func (c *SessionTrackerV1) GetSubKind() string {
-	return c.SubKind
+func (s *SessionTrackerV1) GetSubKind() string {
+	return s.SubKind
 }
 
 // SetSubKind sets resource subkind.
-func (c *SessionTrackerV1) SetSubKind(sk string) {
-	c.SubKind = sk
+func (s *SessionTrackerV1) SetSubKind(sk string) {
+	s.SubKind = sk
 }
 
 // CheckAndSetDefaults sets defaults for the session resource.

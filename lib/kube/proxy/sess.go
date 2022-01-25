@@ -213,7 +213,7 @@ func (r *multiResizeQueue) Next() *remotecommand.TerminalSize {
 // party represents one participant of the session and their associated state.
 type party struct {
 	Ctx       authContext
-	Id        uuid.UUID
+	ID        uuid.UUID
 	Client    remoteClient
 	Mode      types.SessionParticipantMode
 	closeC    chan struct{}
@@ -224,7 +224,7 @@ type party struct {
 func newParty(ctx authContext, mode types.SessionParticipantMode, client remoteClient) *party {
 	return &party{
 		Ctx:    ctx,
-		Id:     uuid.New(),
+		ID:     uuid.New(),
 		Client: client,
 		Mode:   mode,
 		closeC: make(chan struct{}),
@@ -342,7 +342,7 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 		started:           false,
 		sess:              sess,
 		closeC:            make(chan struct{}),
-		initiator:         initiator.Id,
+		initiator:         initiator.ID,
 		expires:           time.Now().UTC().Add(time.Hour * 24),
 		PresenceEnabled:   ctx.Identity.GetIdentity().MFAVerified != "",
 	}
@@ -400,11 +400,11 @@ func (s *session) checkPresence() error {
 		}
 
 		if participant.Mode == string(types.SessionModeratorMode) && time.Now().UTC().After(participant.LastActive.Add(PresenceMaxDifference)) {
-			s.log.Warn("Participant %v is not active, kicking.", participant.ID)
-			realId, _ := uuid.Parse(participant.ID)
-			err := s.leave(realId)
+			s.log.Debugf("Participant %v is not active, kicking.", participant.ID)
+			id, _ := uuid.Parse(participant.ID)
+			err := s.leave(id)
 			if err != nil {
-				s.log.WithError(err).Warn("Failed to kick participant %v for inactivity.", participant.ID)
+				s.log.WithError(err).Warnf("Failed to kick participant %v for inactivity.", participant.ID)
 			}
 		}
 	}
@@ -813,9 +813,9 @@ func (s *session) join(p *party) error {
 		}
 	}
 
-	stringId := p.Id.String()
-	s.parties[p.Id] = p
-	s.partiesHistorical[p.Id] = p
+	stringID := p.ID.String()
+	s.parties[p.ID] = p
+	s.partiesHistorical[p.ID] = p
 
 	err := s.trackerAddParticipant(p)
 	if err != nil {
@@ -853,11 +853,11 @@ func (s *session) join(p *party) error {
 	s.io.BroadcastMessage(fmt.Sprintf("User %v joined the session.", p.Ctx.User.GetName()))
 
 	if s.tty {
-		s.terminalSizeQueue.add(stringId, p.Client.resizeQueue())
+		s.terminalSizeQueue.add(stringID, p.Client.resizeQueue())
 	}
 
 	if s.tty && p.Ctx.User.GetName() == s.ctx.User.GetName() {
-		s.io.AddReader(stringId, p.Client.stdinStream())
+		s.io.AddReader(stringID, p.Client.stdinStream())
 	}
 
 	recentWrites := s.io.GetRecentHistory()
@@ -866,14 +866,14 @@ func (s *session) join(p *party) error {
 		return trace.Wrap(err)
 	}
 
-	s.io.AddWriter(stringId, p.Client.stdoutStream())
+	s.io.AddWriter(stringID, p.Client.stdoutStream())
 	if p.Mode != types.SessionObserverMode {
 		go func() {
 			c := p.Client.forceTerminate()
 			select {
 			case <-c:
 				go func() {
-					s.log.Infof("Received force termination request")
+					s.log.Debugf("Received force termination request")
 					err := s.Close()
 					if err != nil {
 						s.log.Errorf("Failed to close session: %v.", err)
@@ -923,7 +923,7 @@ func (s *session) leave(id uuid.UUID) error {
 		return nil
 	}
 
-	stringId := id.String()
+	stringID := id.String()
 	party := s.parties[id]
 
 	if party == nil {
@@ -931,9 +931,9 @@ func (s *session) leave(id uuid.UUID) error {
 	}
 
 	delete(s.parties, id)
-	s.terminalSizeQueue.remove(stringId)
-	s.io.DeleteReader(stringId)
-	s.io.DeleteWriter(stringId)
+	s.terminalSizeQueue.remove(stringID)
+	s.io.DeleteReader(stringID)
+	s.io.DeleteWriter(stringID)
 	s.io.BroadcastMessage(fmt.Sprintf("User %v left the session.", party.Ctx.User.GetName()))
 
 	sessionLeaveEvent := &apievents.SessionLeave{
@@ -959,7 +959,7 @@ func (s *session) leave(id uuid.UUID) error {
 		s.forwarder.log.WithError(err).Warn("Failed to emit event.")
 	}
 
-	err := s.trackerRemoveParticipant(party.Id.String())
+	err := s.trackerRemoveParticipant(party.ID.String())
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1051,7 +1051,7 @@ func (s *session) Close() error {
 			s.log.WithError(err).Error("Failed to mark session tracker as terminated.")
 		}
 
-		s.log.Infof("Closing session %v.", s.id.String)
+		s.log.Debugf("Closing session %v.", s.id.String())
 		close(s.closeC)
 		for id, party := range s.parties {
 			err = party.Close()
@@ -1094,7 +1094,7 @@ func (s *session) trackerGet() (types.SessionTracker, error) {
 
 func (s *session) trackerCreate(p *party) error {
 	initator := &types.Participant{
-		ID:         p.Id.String(),
+		ID:         p.ID.String(),
 		User:       p.Ctx.User.GetName(),
 		LastActive: time.Now().UTC(),
 	}
@@ -1117,13 +1117,13 @@ func (s *session) trackerCreate(p *party) error {
 }
 
 func (s *session) trackerAddParticipant(participant *party) error {
-	s.log.Debugf("Tracking participant: %v", participant.Id.String())
+	s.log.Debugf("Tracking participant: %v", participant.ID.String())
 	req := &proto.UpdateSessionTrackerRequest{
 		SessionID: s.id.String(),
 		Update: &proto.UpdateSessionTrackerRequest_AddParticipant{
 			AddParticipant: &proto.SessionTrackerAddParticipant{
 				Participant: &types.Participant{
-					ID:         participant.Id.String(),
+					ID:         participant.ID.String(),
 					User:       participant.Ctx.User.GetName(),
 					Mode:       string(participant.Mode),
 					LastActive: time.Now().UTC(),

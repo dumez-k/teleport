@@ -18,17 +18,9 @@ package services
 
 import (
 	"context"
-	"time"
 
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/types"
-)
-
-const (
-	sessionPrefix               = "session_tracker"
-	sessionList                 = "list"
-	gcDelay       time.Duration = time.Minute * 5
-	retryDelay    time.Duration = time.Second
 )
 
 // SessionTrackerService is a realtime session service that has information about

@@ -2449,7 +2449,7 @@ func (c *Client) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSess
 	return trail.FromGRPC(err)
 }
 
-// MaintainSessionPresence establishes a channel used to continously verify the presence for a session.
+// MaintainSessionPresence establishes a channel used to continuously verify the presence for a session.
 func (c *Client) MaintainSessionPresence(ctx context.Context) (proto.AuthService_MaintainSessionPresenceClient, error) {
 	stream, err := c.grpc.MaintainSessionPresence(ctx)
 	return stream, trail.FromGRPC(err)

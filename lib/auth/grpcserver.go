@@ -1650,7 +1650,7 @@ func (g *GRPCServer) DeleteRole(ctx context.Context, req *proto.DeleteRoleReques
 	return &empty.Empty{}, nil
 }
 
-// MaintainSessionPresence establishes a channel used to continously verify the presence for a session.
+// MaintainSessionPresence establishes a channel used to continuously verify the presence for a session.
 func (g *GRPCServer) MaintainSessionPresence(stream proto.AuthService_MaintainSessionPresenceServer) error {
 	ctx := stream.Context()
 	actx, err := g.authenticate(ctx)

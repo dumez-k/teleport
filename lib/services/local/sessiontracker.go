@@ -103,9 +103,9 @@ func (s *sessionTracker) UpdatePresence(ctx context.Context, sessionID, user str
 		log.Infof("Session resource %v presence update failed, retrying: %v", sessionID, err)
 		time.Sleep(retryDelay)
 		return s.UpdatePresence(ctx, sessionID, user)
-	} else {
-		return trace.Wrap(err)
 	}
+
+	return trace.Wrap(err)
 }
 
 // GetSessionTracker returns the current state of a session tracker for an active session.
@@ -219,9 +219,9 @@ func (s *sessionTracker) UpdateSessionTracker(ctx context.Context, req *proto.Up
 	if trace.IsCompareFailed(err) {
 		time.Sleep(retryDelay)
 		return s.UpdateSessionTracker(ctx, req)
-	} else {
-		return trace.Wrap(err)
 	}
+
+	return trace.Wrap(err)
 }
 
 // RemoveSessionTracker removes a tracker resource for an active session.
@@ -306,9 +306,9 @@ func (s *sessionTracker) removeSessionFromList(ctx context.Context, sessionID st
 	if trace.IsCompareFailed(err) {
 		time.Sleep(retryDelay)
 		return s.removeSessionFromList(ctx, sessionID)
-	} else {
-		return trace.Wrap(err)
 	}
+
+	return trace.Wrap(err)
 }
 
 func (s *sessionTracker) getSessionList(ctx context.Context) ([]string, error) {

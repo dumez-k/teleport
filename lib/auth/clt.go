@@ -1829,7 +1829,7 @@ type IdentityService interface {
 	// CreateRegisterChallenge creates and returns MFA register challenge for a new MFA device.
 	CreateRegisterChallenge(ctx context.Context, req *proto.CreateRegisterChallengeRequest) (*proto.MFARegisterChallenge, error)
 
-	// MaintainSessionPresence establishes a channel used to continously verify the presence for a session.
+	// MaintainSessionPresence establishes a channel used to continuously verify the presence for a session.
 	MaintainSessionPresence(ctx context.Context) (proto.AuthService_MaintainSessionPresenceClient, error)
 
 	// StartAccountRecovery creates a recovery start token for a user who successfully verified their username and their recovery code.

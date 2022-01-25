@@ -759,19 +759,19 @@ func (f *Forwarder) join(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		return f.remoteJoin(ctx, w, req, p, sess)
 	}
 
-	sessionIdString := p.ByName("session")
-	sessionId, err := uuid.Parse(sessionIdString)
+	sessionIDString := p.ByName("session")
+	sessionID, err := uuid.Parse(sessionIDString)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	session := f.sessions[sessionId]
+	session := f.sessions[sessionID]
 	if session == nil {
-		return nil, trace.NotFound("session %v not found", sessionId)
+		return nil, trace.NotFound("session %v not found", sessionID)
 	}
 
 	if !session.tty {
-		return nil, trace.NotFound("session %v is not interactive", sessionId)
+		return nil, trace.NotFound("session %v is not interactive", sessionID)
 	}
 
 	ws, err := f.upgrader.Upgrade(w, req, nil)
@@ -790,7 +790,7 @@ func (f *Forwarder) join(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		<-stream.Done()
 		session.mu.Lock()
 		defer session.mu.Unlock()
-		session.leave(party.Id)
+		session.leave(party.ID)
 	}()
 
 	err = session.join(party)
@@ -809,8 +809,6 @@ func (f *Forwarder) join(ctx *authContext, w http.ResponseWriter, req *http.Requ
 
 // remoteJoin forwards a join request to a remote cluster.
 func (f *Forwarder) remoteJoin(ctx *authContext, w http.ResponseWriter, req *http.Request, p httprouter.Params, sess *clusterSession) (resp interface{}, err error) {
-	f.log.Error("TRIGGERING REMOTE JOIN WITH URL: %v", req.URL.String())
-
 	dialer := &websocket.Dialer{
 		TLSClientConfig: sess.tlsConfig,
 		NetDialContext:  sess.DialWithContext,
@@ -851,7 +849,11 @@ func wsProxy(wsSource *websocket.Conn, wsTarget *websocket.Conn) error {
 		for {
 			ty, data, err := wsSource.ReadMessage()
 			if err != nil {
-				wsSource.Close()
+				err := wsSource.Close()
+				if err != nil {
+					log.Warnf("Failed to close websocket connection")
+				}
+
 				errS <- trace.Wrap(err)
 				return
 			}
@@ -869,7 +871,11 @@ func wsProxy(wsSource *websocket.Conn, wsTarget *websocket.Conn) error {
 		for {
 			ty, data, err := wsTarget.ReadMessage()
 			if err != nil {
-				wsTarget.Close()
+				err := wsTarget.Close()
+				if err != nil {
+					log.Warnf("Failed to close websocket connection")
+				}
+
 				errT <- trace.Wrap(err)
 				return
 			}

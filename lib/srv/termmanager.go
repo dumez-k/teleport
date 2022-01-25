@@ -23,7 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const MAX_HISTORY = 1000
+const maxHistory = 1000
 
 // TermManager handles the streams of terminal-like sessions.
 // It performs a number of tasks including:
@@ -62,7 +62,7 @@ func NewTermManager() *TermManager {
 
 func (g *TermManager) writeToClients(p []byte) int {
 	g.history = append(g.history, p...)
-	g.history = g.history[:MAX_HISTORY]
+	g.history = g.history[:maxHistory]
 	atomic.AddUint64(&g.countWritten, uint64(len(p)))
 
 	for key, w := range g.writers {
