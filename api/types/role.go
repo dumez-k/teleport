@@ -140,14 +140,18 @@ type Role interface {
 
 	// GetSessionRequirePolicies returns the RBAC required policies for a session.
 	GetSessionRequirePolicies() []*SessionRequirePolicy
-
 	// SetSessionRequirePolicies sets the RBAC required policies for a session.
+	SetSessionRequirePolicies([]*SessionRequirePolicy)
+	// GetSessionJoinPolicies returns the RBAC join policies for a session.
 	GetSessionJoinPolicies() []*SessionJoinPolicy
+	// SetSessionJoinPolicies sets the RBAC join policies for a session.
+	SetSessionJoinPolicies([]*SessionJoinPolicy)
 }
 
 // NewRole constructs new standard role
 func NewRole(name string, spec RoleSpecV5) (Role, error) {
 	role := RoleV5{
+		Version: V5,
 		Metadata: Metadata{
 			Name: name,
 		},
@@ -1076,6 +1080,16 @@ func (r *RoleV5) GetSessionRequirePolicies() []*SessionRequirePolicy {
 }
 
 // SetSessionRequirePolicies sets the RBAC required policies for a session.
+func (r *RoleV5) SetSessionRequirePolicies(policies []*SessionRequirePolicy) {
+	r.Spec.Allow.RequireSessionJoin = policies
+}
+
+// SetSessionJoinPolicies returns the RBAC join policies for a session.
 func (r *RoleV5) GetSessionJoinPolicies() []*SessionJoinPolicy {
 	return r.Spec.Allow.JoinSessions
+}
+
+// SetSessionJoinPolicies sets the RBAC join policies for a session.
+func (r *RoleV5) SetSessionJoinPolicies(policies []*SessionJoinPolicy) {
+	r.Spec.Allow.JoinSessions = policies
 }

@@ -17,7 +17,6 @@ limitations under the License.
 package auth
 
 import (
-	"context"
 	"testing"
 
 	"github.com/gravitational/teleport/api/types"
@@ -49,17 +48,83 @@ type joinTestCase struct {
 	expected    bool
 }
 
-func successJoinTestCase(ctx context.Context) joinTestCase {
-	_, role = CreateRole(context.TODO())
+func successJoinTestCase(t *testing.T) joinTestCase {
+	srv := newTestTLSServer(t)
+	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	require.NoError(t, err)
+	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	require.NoError(t, err)
+
+	participantRole.SetSessionJoinPolicies([]*types.SessionJoinPolicy{{
+		Roles: []string{hostRole.GetName()},
+		Kinds: []string{string(types.SSHSessionKind)},
+		Modes: []string{string("*")},
+	}})
+
+	return joinTestCase{
+		host:        hostRole,
+		sessionKind: types.SSHSessionKind,
+		participant: SessionAccessContext{
+			Username: "participant",
+			Roles:    []types.Role{participantRole},
+		},
+		expected: true,
+	}
+}
+
+func failRoleJoinTestCase(t *testing.T) joinTestCase {
+	srv := newTestTLSServer(t)
+	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	require.NoError(t, err)
+	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	require.NoError(t, err)
+
+	return joinTestCase{
+		host:        hostRole,
+		sessionKind: types.SSHSessionKind,
+		participant: SessionAccessContext{
+			Username: "participant",
+			Roles:    []types.Role{participantRole},
+		},
+		expected: false,
+	}
+}
+
+func failKindTestCase(t *testing.T) joinTestCase {
+	srv := newTestTLSServer(t)
+	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	require.NoError(t, err)
+	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	require.NoError(t, err)
+
+	participantRole.SetSessionJoinPolicies([]*types.SessionJoinPolicy{{
+		Roles: []string{hostRole.GetName()},
+		Kinds: []string{string(types.KubernetesSessionKind)},
+		Modes: []string{string("*")},
+	}})
+
+	return joinTestCase{
+		host:        hostRole,
+		sessionKind: types.SSHSessionKind,
+		participant: SessionAccessContext{
+			Username: "participant",
+			Roles:    []types.Role{participantRole},
+		},
+		expected: false,
+	}
 }
 
 func TestSessionAccessJoin(t *testing.T) {
-	testCases := []joinTestCase{}
+	testCases := []joinTestCase{
+		successJoinTestCase(t),
+		failRoleJoinTestCase(t),
+		failKindTestCase(t),
+	}
 
 	for _, testCase := range testCases {
 		evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
 		result, err := evaluator.CanJoin(testCase.participant)
 		require.NoError(t, err)
-		require.Equal(t, testCase.expected, result)
+		require.Equal(t, testCase.expected, len(result) > 0)
 	}
 }
