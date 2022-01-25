@@ -4018,7 +4018,7 @@ func (a *ServerWithRoles) UpdatePresence(ctx context.Context, sessionID, user st
 }
 
 // UpdatePresence is coupled to the service layer and must exist here but is never actually called
-// since it's handled by the session presence task. This is never valud to call.
+// since it's handled by the session presence task. This is never valid to call.
 func (a *ServerWithRoles) MaintainSessionPresence(ctx context.Context) (proto.AuthService_MaintainSessionPresenceClient, error) {
 	return nil, trace.NotImplemented(notImplementedMessage)
 }
