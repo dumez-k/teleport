@@ -37,8 +37,6 @@ import (
 // httpfallback.go holds endpoints that have been converted to gRPC
 // but still need http fallback logic in the old client.
 
-// DELETE IN 7.0
-
 // GetRoles returns a list of roles
 func (c *Client) GetRoles(ctx context.Context) ([]types.Role, error) {
 	if resp, err := c.APIClient.GetRoles(ctx); err != nil {
@@ -126,8 +124,6 @@ func (c *Client) DeleteRole(ctx context.Context, name string) error {
 	_, err := c.Delete(c.Endpoint("roles", name))
 	return trace.Wrap(err)
 }
-
-// DELETE IN 8.0
 
 // UpsertToken adds provisioning tokens for the auth server
 func (c *Client) UpsertToken(ctx context.Context, tok types.ProvisionToken) error {

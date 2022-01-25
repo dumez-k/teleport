@@ -2214,26 +2214,6 @@ type upsertRoleRawReq struct {
 	Role json.RawMessage `json:"role"`
 }
 
-// DELETE IN 7.0
-func (s *APIServer) upsertRole(auth ClientI, w http.ResponseWriter, r *http.Request, p httprouter.Params, version string) (interface{}, error) {
-	var req *upsertRoleRawReq
-	if err := httplib.ReadJSON(r, &req); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	role, err := services.UnmarshalRole(req.Role)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	if err = services.ValidateRole(role); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	err = auth.UpsertRole(r.Context(), role)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return message(fmt.Sprintf("'%v' role upserted", role.GetName())), nil
-}
-
 func (s *APIServer) getClusterName(auth ClientI, w http.ResponseWriter, r *http.Request, p httprouter.Params, version string) (interface{}, error) {
 	cn, err := auth.GetClusterName()
 	if err != nil {

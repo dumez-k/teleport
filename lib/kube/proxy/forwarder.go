@@ -820,15 +820,17 @@ func (f *Forwarder) remoteJoin(ctx *authContext, w http.ResponseWriter, req *htt
 	}
 	url = url + req.URL.Path
 
-	wsTarget, resp, err := dialer.Dial(url, nil)
+	wsTarget, _, err := dialer.Dial(url, nil)
 	if err != nil {
-		return resp, trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
+	defer wsTarget.Close()
 
 	wsSource, err := f.upgrader.Upgrade(w, req, nil)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+	defer wsTarget.Close()
 
 	err = wsProxy(wsSource, wsTarget)
 	if err != nil {
@@ -849,11 +851,6 @@ func wsProxy(wsSource *websocket.Conn, wsTarget *websocket.Conn) error {
 		for {
 			ty, data, err := wsSource.ReadMessage()
 			if err != nil {
-				err := wsSource.Close()
-				if err != nil {
-					log.Warnf("Failed to close websocket connection")
-				}
-
 				errS <- trace.Wrap(err)
 				return
 			}
@@ -871,11 +868,6 @@ func wsProxy(wsSource *websocket.Conn, wsTarget *websocket.Conn) error {
 		for {
 			ty, data, err := wsTarget.ReadMessage()
 			if err != nil {
-				err := wsTarget.Close()
-				if err != nil {
-					log.Warnf("Failed to close websocket connection")
-				}
-
 				errT <- trace.Wrap(err)
 				return
 			}
