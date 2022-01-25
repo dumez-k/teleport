@@ -31,16 +31,22 @@ type startTestCase struct {
 }
 
 func successStartTestCase(t *testing.T) startTestCase {
-	srv := newTestTLSServer(t)
-	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	hostRole, err := types.NewRole("host", types.RoleSpecV5{})
 	require.NoError(t, err)
-	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	participantRole, err := types.NewRole("participant", types.RoleSpecV5{})
 	require.NoError(t, err)
 
 	hostRole.SetSessionRequirePolicies([]*types.SessionRequirePolicy{{
-		Filter: "contains(participant.roles, \"user:participant\")",
-		Kinds:  []string{string(types.SSHSessionKind)},
-		Count:  2,
+		Filter:  "contains(participant.roles, \"participant\")",
+		Kinds:   []string{string(types.SSHSessionKind)},
+		Count:   2,
+		OnLeave: types.OnSessionLeaveTerminate,
+	}})
+
+	participantRole.SetSessionJoinPolicies([]*types.SessionJoinPolicy{{
+		Roles: []string{hostRole.GetName()},
+		Kinds: []string{string(types.SSHSessionKind)},
+		Modes: []string{string("*")},
 	}})
 
 	return startTestCase{
@@ -61,16 +67,21 @@ func successStartTestCase(t *testing.T) startTestCase {
 }
 
 func failCountStartTestCase(t *testing.T) startTestCase {
-	srv := newTestTLSServer(t)
-	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	hostRole, err := types.NewRole("host", types.RoleSpecV5{})
 	require.NoError(t, err)
-	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	participantRole, err := types.NewRole("participant", types.RoleSpecV5{})
 	require.NoError(t, err)
 
 	hostRole.SetSessionRequirePolicies([]*types.SessionRequirePolicy{{
-		Filter: "contains(participant.roles, \"user:participant\")",
+		Filter: "contains(participant.roles, \"participant\")",
 		Kinds:  []string{string(types.SSHSessionKind)},
 		Count:  3,
+	}})
+
+	participantRole.SetSessionJoinPolicies([]*types.SessionJoinPolicy{{
+		Roles: []string{hostRole.GetName()},
+		Kinds: []string{string(types.SSHSessionKind)},
+		Modes: []string{string("*")},
 	}})
 
 	return startTestCase{
@@ -91,16 +102,21 @@ func failCountStartTestCase(t *testing.T) startTestCase {
 }
 
 func failFilterStartTestCase(t *testing.T) startTestCase {
-	srv := newTestTLSServer(t)
-	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	hostRole, err := types.NewRole("host", types.RoleSpecV5{})
 	require.NoError(t, err)
-	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	participantRole, err := types.NewRole("participant", types.RoleSpecV5{})
 	require.NoError(t, err)
 
 	hostRole.SetSessionRequirePolicies([]*types.SessionRequirePolicy{{
-		Filter: "contains(participant.roles, \"user:host\")",
+		Filter: "contains(participant.roles, \"host\")",
 		Kinds:  []string{string(types.SSHSessionKind)},
 		Count:  2,
+	}})
+
+	participantRole.SetSessionJoinPolicies([]*types.SessionJoinPolicy{{
+		Roles: []string{hostRole.GetName()},
+		Kinds: []string{string(types.SSHSessionKind)},
+		Modes: []string{string("*")},
 	}})
 
 	return startTestCase{
@@ -143,10 +159,9 @@ type joinTestCase struct {
 }
 
 func successJoinTestCase(t *testing.T) joinTestCase {
-	srv := newTestTLSServer(t)
-	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	hostRole, err := types.NewRole("host", types.RoleSpecV5{})
 	require.NoError(t, err)
-	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	participantRole, err := types.NewRole("participant", types.RoleSpecV5{})
 	require.NoError(t, err)
 
 	participantRole.SetSessionJoinPolicies([]*types.SessionJoinPolicy{{
@@ -167,10 +182,9 @@ func successJoinTestCase(t *testing.T) joinTestCase {
 }
 
 func failRoleJoinTestCase(t *testing.T) joinTestCase {
-	srv := newTestTLSServer(t)
-	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	hostRole, err := types.NewRole("host", types.RoleSpecV5{})
 	require.NoError(t, err)
-	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	participantRole, err := types.NewRole("participant", types.RoleSpecV5{})
 	require.NoError(t, err)
 
 	return joinTestCase{
@@ -185,10 +199,9 @@ func failRoleJoinTestCase(t *testing.T) joinTestCase {
 }
 
 func failKindJoinTestCase(t *testing.T) joinTestCase {
-	srv := newTestTLSServer(t)
-	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	hostRole, err := types.NewRole("host", types.RoleSpecV5{})
 	require.NoError(t, err)
-	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	participantRole, err := types.NewRole("participant", types.RoleSpecV5{})
 	require.NoError(t, err)
 
 	participantRole.SetSessionJoinPolicies([]*types.SessionJoinPolicy{{
