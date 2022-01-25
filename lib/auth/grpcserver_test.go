@@ -1374,20 +1374,20 @@ func TestRoleVersions(t *testing.T) {
 	}{
 		{
 			desc:                "old",
-			clientVersion:       "6.2.1",
-			expectedRoleVersion: "v3",
+			clientVersion:       "7.1.1",
+			expectedRoleVersion: "v4",
 			assertErr:           require.NoError,
 		},
 		{
 			desc:                "new",
-			clientVersion:       "6.3.0",
+			clientVersion:       "8.1.1",
 			expectedRoleVersion: "v5",
 			assertErr:           require.NoError,
 		},
 		{
 			desc:                "alpha",
-			clientVersion:       "6.2.4-alpha.0",
-			expectedRoleVersion: "v5",
+			clientVersion:       "7.2.4-alpha.0",
+			expectedRoleVersion: "v4",
 			assertErr:           require.NoError,
 		},
 		{
@@ -1409,7 +1409,7 @@ func TestRoleVersions(t *testing.T) {
 		{
 			desc:                "no version metadata",
 			disableMetadata:     true,
-			expectedRoleVersion: "v3",
+			expectedRoleVersion: "v5",
 			assertErr:           require.NoError,
 		},
 	}
