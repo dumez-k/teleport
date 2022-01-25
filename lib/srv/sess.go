@@ -707,7 +707,7 @@ func newSession(id rsession.ID, r *SessionRegistry, ctx *ServerContext) (*sessio
 		io:              NewTermManager(),
 	}
 
-	err = sess.trackerCreate(ctx.Identity.TeleportUser)
+	err = sess.trackerCreate(ctx.Identity.TeleportUser, initiator)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -1753,7 +1753,7 @@ func (s *session) trackerGet() (types.SessionTracker, error) {
 	return sess, nil
 }
 
-func (s *session) trackerCreate(teleportUser string) error {
+func (s *session) trackerCreate(teleportUser string, hostRoles []types.Role) error {
 	if s.registry.auth == nil {
 		return nil
 	}
@@ -1772,6 +1772,16 @@ func (s *session) trackerCreate(teleportUser string) error {
 		return trace.Wrap(err)
 	}
 
+	hostRolesV5 := make([]*types.RoleV5, len(hostRoles))
+	for _, role := range hostRoles {
+		roleV5, ok := role.(*types.RoleV5)
+		if !ok {
+			return trace.BadParameter("Found unexpected role structure: %T", role)
+		}
+
+		hostRolesV5 = append(hostRolesV5, roleV5)
+	}
+
 	req := &proto.CreateSessionTrackerRequest{
 		ID:          s.id.String(),
 		Namespace:   apidefaults.Namespace,
@@ -1785,6 +1795,7 @@ func (s *session) trackerCreate(teleportUser string) error {
 		HostUser:    initator.User,
 		Reason:      reason,
 		Invited:     invited,
+		HostRoles:   hostRolesV5,
 	}
 
 	_, err = s.registry.auth.CreateSessionTracker(s.serverCtx, req)

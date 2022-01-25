@@ -2849,6 +2849,9 @@ message SessionTrackerSpecV1 {
     //
     // This refers to the Teleport user but may not be the same as the sessions initiator.
     string HostUser = 15 [ (gogoproto.jsontag) = "host_user,omitempty" ];
+
+    // HostRoles is a list of roles held by the host user at the time of session creation.
+    repeated RoleV5 HostRoles = 16 [ (gogoproto.jsontag) = "host_roles,omitempty" ];
 }
 
 // Participant stores information about a participant in the session.

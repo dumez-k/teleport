@@ -347,7 +347,7 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 		PresenceEnabled:   ctx.Identity.GetIdentity().MFAVerified != "",
 	}
 
-	err = s.trackerCreate(initiator)
+	err = s.trackerCreate(initiator, roles)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -1092,11 +1092,21 @@ func (s *session) trackerGet() (types.SessionTracker, error) {
 	return sess, nil
 }
 
-func (s *session) trackerCreate(p *party) error {
+func (s *session) trackerCreate(p *party, hostRoles []types.Role) error {
 	initator := &types.Participant{
 		ID:         p.ID.String(),
 		User:       p.Ctx.User.GetName(),
 		LastActive: time.Now().UTC(),
+	}
+
+	hostRolesV5 := make([]*types.RoleV5, len(hostRoles))
+	for _, role := range hostRoles {
+		roleV5, ok := role.(*types.RoleV5)
+		if !ok {
+			return trace.BadParameter("Found unexpected role structure: %T", role)
+		}
+
+		hostRolesV5 = append(hostRolesV5, roleV5)
 	}
 
 	req := &proto.CreateSessionTrackerRequest{
@@ -1110,6 +1120,7 @@ func (s *session) trackerCreate(p *party) error {
 		Expires:           s.expires,
 		KubernetesCluster: s.ctx.kubeCluster,
 		HostUser:          initator.User,
+		HostRoles:         hostRolesV5,
 	}
 
 	_, err := s.forwarder.cfg.AuthClient.CreateSessionTracker(s.forwarder.ctx, req)

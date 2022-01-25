@@ -281,23 +281,7 @@ func (a *ServerWithRoles) GetActiveSessionTrackers(ctx context.Context) ([]types
 	var filteredSessions []types.SessionTracker
 
 	for _, session := range sessions {
-		hostName := session.GetHostUser()
-		host, err := a.authServer.GetUser(hostName, false)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-
-		var hostRoles []types.Role
-		for _, roleName := range host.GetRoles() {
-			role, err := a.GetRole(ctx, roleName)
-			if err != nil {
-				return nil, trace.Wrap(err)
-			}
-
-			hostRoles = append(hostRoles, role)
-		}
-
-		evaluator := NewSessionAccessEvaluator(hostRoles, session.GetSessionKind())
+		evaluator := NewSessionAccessEvaluator(session.GetHostRoles(), session.GetSessionKind())
 		joinerRoles, err := a.GetRoles(ctx)
 		if err != nil {
 			return nil, trace.Wrap(err)
