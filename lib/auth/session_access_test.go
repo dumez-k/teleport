@@ -30,8 +30,102 @@ type startTestCase struct {
 	expected     bool
 }
 
+func successStartTestCase(t *testing.T) startTestCase {
+	srv := newTestTLSServer(t)
+	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	require.NoError(t, err)
+	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	require.NoError(t, err)
+
+	hostRole.SetSessionRequirePolicies([]*types.SessionRequirePolicy{{
+		Filter: "contains(participant.roles, \"user:participant\")",
+		Kinds:  []string{string(types.SSHSessionKind)},
+		Count:  2,
+	}})
+
+	return startTestCase{
+		host:        hostRole,
+		sessionKind: types.SSHSessionKind,
+		participants: []SessionAccessContext{
+			{
+				Username: "participant",
+				Roles:    []types.Role{participantRole},
+			},
+			{
+				Username: "participant2",
+				Roles:    []types.Role{participantRole},
+			},
+		},
+		expected: true,
+	}
+}
+
+func failCountStartTestCase(t *testing.T) startTestCase {
+	srv := newTestTLSServer(t)
+	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	require.NoError(t, err)
+	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	require.NoError(t, err)
+
+	hostRole.SetSessionRequirePolicies([]*types.SessionRequirePolicy{{
+		Filter: "contains(participant.roles, \"user:participant\")",
+		Kinds:  []string{string(types.SSHSessionKind)},
+		Count:  3,
+	}})
+
+	return startTestCase{
+		host:        hostRole,
+		sessionKind: types.SSHSessionKind,
+		participants: []SessionAccessContext{
+			{
+				Username: "participant",
+				Roles:    []types.Role{participantRole},
+			},
+			{
+				Username: "participant2",
+				Roles:    []types.Role{participantRole},
+			},
+		},
+		expected: false,
+	}
+}
+
+func failFilterStartTestCase(t *testing.T) startTestCase {
+	srv := newTestTLSServer(t)
+	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
+	require.NoError(t, err)
+	_, participantRole, err := CreateUserAndRole(srv.Auth(), "participant", nil)
+	require.NoError(t, err)
+
+	hostRole.SetSessionRequirePolicies([]*types.SessionRequirePolicy{{
+		Filter: "contains(participant.roles, \"user:host\")",
+		Kinds:  []string{string(types.SSHSessionKind)},
+		Count:  2,
+	}})
+
+	return startTestCase{
+		host:        hostRole,
+		sessionKind: types.SSHSessionKind,
+		participants: []SessionAccessContext{
+			{
+				Username: "participant",
+				Roles:    []types.Role{participantRole},
+			},
+			{
+				Username: "participant2",
+				Roles:    []types.Role{participantRole},
+			},
+		},
+		expected: false,
+	}
+}
+
 func TestSessionAccessStart(t *testing.T) {
-	testCases := []startTestCase{}
+	testCases := []startTestCase{
+		successStartTestCase(t),
+		failCountStartTestCase(t),
+		failFilterStartTestCase(t),
+	}
 
 	for _, testCase := range testCases {
 		evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
@@ -90,7 +184,7 @@ func failRoleJoinTestCase(t *testing.T) joinTestCase {
 	}
 }
 
-func failKindTestCase(t *testing.T) joinTestCase {
+func failKindJoinTestCase(t *testing.T) joinTestCase {
 	srv := newTestTLSServer(t)
 	_, hostRole, err := CreateUserAndRole(srv.Auth(), "host", nil)
 	require.NoError(t, err)
@@ -118,7 +212,7 @@ func TestSessionAccessJoin(t *testing.T) {
 	testCases := []joinTestCase{
 		successJoinTestCase(t),
 		failRoleJoinTestCase(t),
-		failKindTestCase(t),
+		failKindJoinTestCase(t),
 	}
 
 	for _, testCase := range testCases {
