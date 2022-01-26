@@ -42,7 +42,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/net/websocket"
 	"golang.org/x/text/encoding/unicode"
 
 	"github.com/gravitational/teleport"
@@ -84,6 +83,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/jonboulle/clockwork"
 	lemma_secret "github.com/mailgun/lemma/secret"
 	"github.com/pquerna/otp/totp"
@@ -1004,7 +1004,7 @@ func (s *WebSuite) TestResizeTerminal(c *C) {
 	}
 	envelopeBytes, err := proto.Marshal(envelope)
 	c.Assert(err, IsNil)
-	err = websocket.Message.Send(ws2, envelopeBytes)
+	err = ws2.WriteMessage(websocket.BinaryMessage, envelopeBytes)
 	c.Assert(err, IsNil)
 
 	// This time the first terminal will see the resize event.
@@ -1136,7 +1136,9 @@ func TestTerminalRequireSessionMfa(t *testing.T) {
 
 			// Wait for websocket authn challenge event.
 			var raw []byte
-			require.Nil(t, websocket.Message.Receive(ws, &raw))
+			ty, raw, err := ws.ReadMessage()
+			require.Nil(t, err)
+			require.Equal(t, websocket.BinaryMessage, ty)
 			var env Envelope
 			require.Nil(t, proto.Unmarshal(raw, &env))
 
@@ -1145,7 +1147,7 @@ func TestTerminalRequireSessionMfa(t *testing.T) {
 
 			// Send response over ws.
 			termHandler := newTerminalHandler()
-			_, err := termHandler.write(tc.getChallengeResponseBytes(chals, dev), ws)
+			_, err = termHandler.write(tc.getChallengeResponseBytes(chals, dev), ws)
 			require.Nil(t, err)
 
 			// Test we can write.
@@ -1157,48 +1159,6 @@ func TestTerminalRequireSessionMfa(t *testing.T) {
 			require.Nil(t, ws.Close())
 		})
 	}
-}
-
-func (s *WebSuite) TestWebsocketPingLoop(c *C) {
-	// Change cluster networking config for keep alive interval to be run faster.
-	netConfig, err := types.NewClusterNetworkingConfigFromConfigFile(types.ClusterNetworkingConfigSpecV2{
-		KeepAliveInterval: types.NewDuration(250 * time.Millisecond),
-	})
-	c.Assert(err, IsNil)
-	err = s.server.Auth().SetClusterNetworkingConfig(s.ctx, netConfig)
-	c.Assert(err, IsNil)
-
-	recConfig, err := types.NewSessionRecordingConfigFromConfigFile(types.SessionRecordingConfigSpecV2{
-		Mode:                types.RecordAtNode,
-		ProxyChecksHostKeys: types.NewBoolOption(true),
-	})
-	c.Assert(err, IsNil)
-	err = s.server.Auth().SetSessionRecordingConfig(s.ctx, recConfig)
-	c.Assert(err, IsNil)
-
-	ws, err := s.makeTerminal(s.authPack(c, "foo"))
-	c.Assert(err, IsNil)
-
-	var numPings int
-	start := time.Now()
-	for {
-		frame, err := ws.NewFrameReader()
-		c.Assert(err, IsNil)
-		// We should get a mix of output (binary) and ping frames. Count only
-		// the ping frames.
-		if int(frame.PayloadType()) == websocket.PingFrame {
-			numPings++
-		}
-		if numPings > 1 {
-			break
-		}
-		if deadline := 15 * time.Second; time.Since(start) > deadline {
-			c.Fatalf("Received %v ping frames within %v of opening a socket, expected at least 2", numPings, deadline)
-		}
-	}
-
-	err = ws.Close()
-	c.Assert(err, IsNil)
 }
 
 func (s *WebSuite) TestWebAgentForward(c *C) {
@@ -2889,19 +2849,13 @@ func (s *WebSuite) makeTerminal(pack *authPack, opts ...session.ID) (*websocket.
 	q.Set(roundtrip.AccessTokenQueryParam, pack.session.Token)
 	u.RawQuery = q.Encode()
 
-	wscfg, err := websocket.NewConfig(u.String(), "http://localhost")
-	wscfg.TlsConfig = &tls.Config{
+	dialer := websocket.Dialer{}
+	dialer.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
-	if err != nil {
-		return nil, err
-	}
 
-	for _, cookie := range pack.cookies {
-		wscfg.Header.Add("Cookie", cookie.String())
-	}
-
-	ws, err := websocket.DialConfig(wscfg)
+	dialer.Jar.SetCookies(&u, pack.cookies)
+	ws, _, err := dialer.Dial(u.String(), nil)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -2938,8 +2892,7 @@ func (s *WebSuite) waitForRawEvent(ws *websocket.Conn, timeout time.Duration) er
 
 	go func() {
 		for {
-			var raw []byte
-			err := websocket.Message.Receive(ws, &raw)
+			_, raw, err := ws.ReadMessage()
 			if err != nil {
 				done <- trace.Wrap(err)
 				return
@@ -2977,8 +2930,7 @@ func (s *WebSuite) waitForResizeEvent(ws *websocket.Conn, timeout time.Duration)
 
 	go func() {
 		for {
-			var raw []byte
-			err := websocket.Message.Receive(ws, &raw)
+			_, raw, err := ws.ReadMessage()
 			if err != nil {
 				done <- trace.Wrap(err)
 				return
@@ -3517,20 +3469,15 @@ func (r *proxy) makeTerminal(t *testing.T, pack *authPack, sessionID session.ID)
 	q.Set(roundtrip.AccessTokenQueryParam, pack.session.Token)
 	u.RawQuery = q.Encode()
 
-	wscfg, err := websocket.NewConfig(u.String(), "http://localhost")
-	wscfg.TlsConfig = &tls.Config{
+	dialer := websocket.Dialer{}
+	dialer.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
-	require.NoError(t, err)
 
-	for _, cookie := range pack.cookies {
-		wscfg.Header.Add("Cookie", cookie.String())
-	}
-
-	ws, err := websocket.DialConfig(wscfg)
+	dialer.Jar.SetCookies(&u, pack.cookies)
+	ws, _, err := dialer.Dial(u.String(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
-
 	return ws
 }
 

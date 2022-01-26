@@ -625,6 +625,8 @@ type session struct {
 	done chan bool
 
 	terminated bool
+
+	started bool
 }
 
 // newSession creates a new session with a given ID within a given context.
@@ -750,12 +752,8 @@ func (s *session) Close() error {
 			close(s.closeC)
 			s.io.BroadcastMessage("Closing session...")
 			s.log.Infof("Closing session %v.", s.id)
-			err := s.trackerUpdateState(types.SessionState_SessionStateTerminated)
 			if s.term != nil {
 				s.term.Close()
-			}
-			if err != nil {
-				s.log.WithError(err).Errorf("Failed to update tracker state.")
 			}
 
 			for _, p := range s.parties {
@@ -770,6 +768,10 @@ func (s *session) Close() error {
 			}
 			s.state = types.SessionState_SessionStateTerminated
 			s.stateUpdate.Broadcast()
+			err := s.trackerUpdateState(types.SessionState_SessionStateRunning)
+			if err != nil {
+				s.log.Warnf("Failed to set tracker state to %v", types.SessionState_SessionStateRunning)
+			}
 		}()
 	})
 	return nil
@@ -791,13 +793,11 @@ func (s *session) waitOnAccess() error {
 		log.WithError(err).Errorf("Failed to broadcast message.")
 	}
 
+	s.stateUpdate.L.Lock()
+	defer s.stateUpdate.L.Unlock()
 outer:
 	for {
-		s.mu.RLock()
-		state := s.state
-		s.mu.RUnlock()
-
-		switch state {
+		switch s.state {
 		case types.SessionState_SessionStatePending:
 			continue
 		case types.SessionState_SessionStateTerminated:
@@ -816,12 +816,17 @@ outer:
 
 func (s *session) launch(ctx *ServerContext) error {
 	s.mu.Lock()
-	defer s.mu.RUnlock()
+	defer s.mu.Unlock()
+	s.stateUpdate.L.Lock()
+	defer s.stateUpdate.L.Unlock()
 
 	s.io.BroadcastMessage("Launching session...")
 	s.state = types.SessionState_SessionStateRunning
 	s.stateUpdate.Broadcast()
-	s.trackerUpdateState(types.SessionState_SessionStateRunning)
+	err := s.trackerUpdateState(types.SessionState_SessionStateRunning)
+	if err != nil {
+		s.log.Warnf("Failed to set tracker state to %v", types.SessionState_SessionStateRunning)
+	}
 
 	// If the identity is verified with an MFA device, we enabled MFA-based presence for the session.
 	if s.presenceEnabled {
@@ -1310,8 +1315,15 @@ func (s *session) removeParty(p *party) error {
 	}
 
 	if !canRun {
+		s.stateUpdate.L.Lock()
+		defer s.stateUpdate.L.Unlock()
 		s.state = types.SessionState_SessionStatePending
 		s.stateUpdate.Broadcast()
+		err := s.trackerUpdateState(types.SessionState_SessionStatePending)
+		if err != nil {
+			s.log.Warnf("Failed to set tracker state to %v", types.SessionState_SessionStatePending)
+		}
+
 		go s.waitOnAccess()
 	}
 
@@ -1516,13 +1528,18 @@ func (s *session) addParty(p *party, mode types.SessionParticipantMode) error {
 		}()
 	}
 
+	s.stateUpdate.L.Lock()
+	defer s.stateUpdate.L.Unlock()
+
 	if s.state == types.SessionState_SessionStatePending {
 		canStart, err := s.checkIfStart()
 		if err != nil {
 			return trace.Wrap(err)
 		}
 
-		if canStart {
+		if canStart && !s.started {
+			s.started = true
+
 			go func() {
 				err := s.launch(s.scx)
 				if err != nil {

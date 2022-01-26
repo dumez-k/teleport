@@ -27,11 +27,9 @@ import (
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/auth/u2f"
-	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/services"
 
 	"github.com/gravitational/trace"
-	"github.com/jonboulle/clockwork"
 )
 
 // httpfallback.go holds endpoints that have been converted to gRPC
@@ -94,28 +92,6 @@ func (c *Client) DeleteRole(ctx context.Context, name string) error {
 	}
 	_, err := c.Delete(c.Endpoint("roles", name))
 	return trace.Wrap(err)
-}
-
-// DELETE IN 8.0
-// UpsertToken adds provisioning tokens for the auth server
-func (c *Client) UpsertToken(ctx context.Context, tok types.ProvisionToken) error {
-	if err := c.APIClient.UpsertToken(ctx, tok); err != nil {
-		if !trace.IsNotImplemented(err) {
-			return trace.Wrap(err)
-		}
-	} else {
-		return nil
-	}
-
-	_, err := c.PostJSON(c.Endpoint("tokens"), GenerateTokenRequest{
-		Token: tok.GetName(),
-		Roles: tok.GetRoles(),
-		TTL:   backend.TTL(clockwork.NewRealClock(), tok.Expiry()),
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	return nil
 }
 
 // GetTokens returns a list of active invitation tokens for nodes and users

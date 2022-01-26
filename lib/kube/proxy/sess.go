@@ -365,13 +365,12 @@ func (s *session) waitOnAccess() {
 	s.io.Off()
 	s.io.BroadcastMessage("Session paused, Waiting for required participants...")
 
+	s.stateUpdate.L.Lock()
+	defer s.stateUpdate.L.Unlock()
+
 outer:
 	for {
-		s.mu.RLock()
-		state := s.state
-		s.mu.RUnlock()
-
-		switch state {
+		switch s.state {
 		case types.SessionState_SessionStatePending:
 			continue
 		case types.SessionState_SessionStateTerminated:
@@ -889,6 +888,9 @@ func (s *session) join(p *party) error {
 		}()
 	}
 
+	s.stateUpdate.L.Lock()
+	defer s.stateUpdate.L.Unlock()
+
 	if s.state != types.SessionState_SessionStatePending {
 		return nil
 	}
@@ -901,6 +903,11 @@ func (s *session) join(p *party) error {
 	if s.started && canStart {
 		s.state = types.SessionState_SessionStateRunning
 		s.stateUpdate.Broadcast()
+		err := s.trackerUpdateState(types.SessionState_SessionStateRunning)
+		if err != nil {
+			s.log.Warnf("Failed to set tracker state to %v", types.SessionState_SessionStateRunning)
+		}
+
 		return nil
 	}
 
@@ -923,6 +930,9 @@ func (s *session) join(p *party) error {
 
 // leave removes a party from the session.
 func (s *session) leave(id uuid.UUID) error {
+	s.stateUpdate.L.Lock()
+	defer s.stateUpdate.L.Unlock()
+
 	if s.state == types.SessionState_SessionStateTerminated {
 		return nil
 	}
@@ -1001,6 +1011,11 @@ func (s *session) leave(id uuid.UUID) error {
 		} else {
 			s.state = types.SessionState_SessionStatePending
 			s.stateUpdate.Broadcast()
+			err := s.trackerUpdateState(types.SessionState_SessionStateRunning)
+			if err != nil {
+				s.log.Warnf("Failed to set tracker state to %v", types.SessionState_SessionStateRunning)
+			}
+
 			go s.waitOnAccess()
 		}
 	}
@@ -1046,12 +1061,14 @@ func (s *session) Close() error {
 
 	s.closeOnce.Do(func() {
 		s.io.BroadcastMessage("Closing session...")
+		s.stateUpdate.L.Lock()
+		defer s.stateUpdate.L.Unlock()
 		s.state = types.SessionState_SessionStateTerminated
 		s.io.Close()
 		s.stateUpdate.Broadcast()
 		err := s.trackerUpdateState(types.SessionState_SessionStateTerminated)
 		if err != nil {
-			s.log.WithError(err).Error("Failed to mark session tracker as terminated.")
+			s.log.Warnf("Failed to set tracker state to %v", types.SessionState_SessionStateTerminated)
 		}
 
 		s.log.Debugf("Closing session %v.", s.id.String())
