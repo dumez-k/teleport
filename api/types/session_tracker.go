@@ -95,8 +95,9 @@ type SessionTracker interface {
 	// Things like RBAC policies are determined from this user.
 	GetHostUser() string
 
-	// GetHostRoles returns a list of roles held by the host user at the time of session creation.
-	GetHostRoles() []Role
+	// GetHostPolicySets returns a list of policy sets held by the host user at the time of session creation.
+	// This a subset of a role that contains some versioning and naming information in addition to the require policies
+	GetHostPolicySets() []*SessionTrackerPolicySet
 }
 
 func NewSessionTracker(spec SessionTrackerSpecV1) (SessionTracker, error) {
@@ -300,12 +301,8 @@ func (s *SessionTrackerV1) UpdatePresence(user string) error {
 	return trace.NotFound("participant %v not found", user)
 }
 
-// GetHostRoles returns a list of roles held by the host user at the time of session creation.
-func (s *SessionTrackerV1) GetHostRoles() []Role {
-	var roles []Role
-	for _, v5Role := range s.Spec.HostRoles {
-		roles = append(roles, v5Role)
-	}
-
-	return roles
+// GetHostPolicySets returns a list of policy sets held by the host user at the time of session creation.
+// This a subset of a role that contains some versioning and naming information in addition to the require policies
+func (s *SessionTrackerV1) GetHostPolicySets() []*SessionTrackerPolicySet {
+	return s.Spec.HostPolicies
 }

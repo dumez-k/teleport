@@ -314,7 +314,13 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 		return nil, trace.Wrap(err)
 	}
 
-	accessEvaluator := auth.NewSessionAccessEvaluator(roles, types.KubernetesSessionKind)
+	var policySets []*types.SessionTrackerPolicySet
+	for _, role := range roles {
+		policySet := role.GetSessionPolicySet()
+		policySets = append(policySets, &policySet)
+	}
+
+	accessEvaluator := auth.NewSessionAccessEvaluator(policySets, types.KubernetesSessionKind)
 
 	io := srv.NewTermManager()
 	err = io.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", id.String()))
@@ -347,7 +353,7 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 		PresenceEnabled:   ctx.Identity.GetIdentity().MFAVerified != "",
 	}
 
-	err = s.trackerCreate(initiator, roles)
+	err = s.trackerCreate(initiator, policySets)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -1092,21 +1098,11 @@ func (s *session) trackerGet() (types.SessionTracker, error) {
 	return sess, nil
 }
 
-func (s *session) trackerCreate(p *party, hostRoles []types.Role) error {
+func (s *session) trackerCreate(p *party, policySets []*types.SessionTrackerPolicySet) error {
 	initator := &types.Participant{
 		ID:         p.ID.String(),
 		User:       p.Ctx.User.GetName(),
 		LastActive: time.Now().UTC(),
-	}
-
-	hostRolesV5 := make([]*types.RoleV5, len(hostRoles))
-	for _, role := range hostRoles {
-		roleV5, ok := role.(*types.RoleV5)
-		if !ok {
-			return trace.BadParameter("Found unexpected role structure: %T", role)
-		}
-
-		hostRolesV5 = append(hostRolesV5, roleV5)
 	}
 
 	req := &proto.CreateSessionTrackerRequest{
@@ -1120,7 +1116,7 @@ func (s *session) trackerCreate(p *party, hostRoles []types.Role) error {
 		Expires:           s.expires,
 		KubernetesCluster: s.ctx.kubeCluster,
 		HostUser:          initator.User,
-		HostRoles:         hostRolesV5,
+		HostPolicies:      policySets,
 	}
 
 	_, err := s.forwarder.cfg.AuthClient.CreateSessionTracker(s.forwarder.ctx, req)

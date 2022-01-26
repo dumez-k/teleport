@@ -2850,8 +2850,24 @@ message SessionTrackerSpecV1 {
     // This refers to the Teleport user but may not be the same as the sessions initiator.
     string HostUser = 15 [ (gogoproto.jsontag) = "host_user,omitempty" ];
 
-    // HostRoles is a list of roles held by the host user at the time of session creation.
-    repeated RoleV5 HostRoles = 16 [ (gogoproto.jsontag) = "host_roles,omitempty" ];
+    // HostPolicies is a list of RBAC policy sets held by the host user at the time of session
+    // creation.
+    repeated SessionTrackerPolicySet HostPolicies = 16
+        [ (gogoproto.jsontag) = "host_roles,omitempty" ];
+}
+
+// SessionTrackerPolicySet is a set of RBAC policies held by the session tracker
+// that contain additional metadata from the originating role.
+message SessionTrackerPolicySet {
+    // Name is name of the role this policy set originates from.
+    string Name = 1 [ (gogoproto.jsontag) = "name,omitempty" ];
+
+    // Version is version of the role this policy set originates from.
+    string Version = 2 [ (gogoproto.jsontag) = "version,omitempty" ];
+
+    // RequireSessionJoin specifies policies for required users to start a session.
+    repeated SessionRequirePolicy RequireSessionJoin = 3
+        [ (gogoproto.jsontag) = "require_session_join,omitempty" ];
 }
 
 // Participant stores information about a participant in the session.

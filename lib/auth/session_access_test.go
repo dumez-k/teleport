@@ -149,7 +149,8 @@ func TestSessionAccessStart(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
+			policy := testCase.host.GetSessionPolicySet()
+			evaluator := NewSessionAccessEvaluator([]*types.SessionTrackerPolicySet{&policy}, testCase.sessionKind)
 			result, _, err := evaluator.FulfilledFor(testCase.participants)
 			require.NoError(t, err)
 			require.Equal(t, testCase.expected, result)
@@ -240,7 +241,8 @@ func TestSessionAccessJoin(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
+			policy := testCase.host.GetSessionPolicySet()
+			evaluator := NewSessionAccessEvaluator([]*types.SessionTrackerPolicySet{&policy}, testCase.sessionKind)
 			result, err := evaluator.CanJoin(testCase.participant)
 			require.NoError(t, err)
 			require.Equal(t, testCase.expected, len(result) > 0)

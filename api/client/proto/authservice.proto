@@ -1467,8 +1467,10 @@ message CreateSessionTrackerRequest {
     // ID is the ID of the session.
     string ID = 13 [ (gogoproto.jsontag) = "id,omitempty" ];
 
-    // HostRoles is a list of roles held by the host user at the time of session creation.
-    repeated types.RoleV5 HostRoles = 14 [ (gogoproto.jsontag) = "host_roles,omitempty" ];
+    // HostPolicies is a list of RBAC policy sets held by the host user at the time of session
+    // creation.
+    repeated types.SessionTrackerPolicySet HostPolicies = 14
+        [ (gogoproto.jsontag) = "host_roles,omitempty" ];
 }
 
 // GetSessionTrackerRequest is a request to fetch a session resource.

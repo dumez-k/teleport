@@ -36,33 +36,31 @@ import (
 // that is harder to debug in the case of misconfigured policies or other error and are harder to intuitively follow.
 // In the real world, the number of roles and session are small enough that this doesn't have a meaningful impact.
 type SessionAccessEvaluator struct {
-	kind     types.SessionKind
-	requires []*types.SessionRequirePolicy
-	roles    []types.Role
+	kind       types.SessionKind
+	policySets []*types.SessionTrackerPolicySet
+	requires   []*types.SessionRequirePolicy
 }
 
 // NewSessionAccessEvaluator creates a new session access evaluator for a given session kind
 // and a set of roles attached to the host user.
-func NewSessionAccessEvaluator(roles []types.Role, kind types.SessionKind) SessionAccessEvaluator {
-	requires := getRequirePolicies(roles)
-
+func NewSessionAccessEvaluator(policySets []*types.SessionTrackerPolicySet, kind types.SessionKind) SessionAccessEvaluator {
+	requires := getRequirePolicies(policySets)
 	return SessionAccessEvaluator{
 		kind,
+		policySets,
 		requires,
-		roles,
 	}
 }
 
-func getRequirePolicies(participant []types.Role) []*types.SessionRequirePolicy {
+func getRequirePolicies(policySets []*types.SessionTrackerPolicySet) []*types.SessionRequirePolicy {
 	var policies []*types.SessionRequirePolicy
 
-	for _, role := range participant {
-		policiesFromRole := role.GetSessionRequirePolicies()
-		if len(policiesFromRole) == 0 {
+	for _, policySet := range policySets {
+		if len(policySet.RequireSessionJoin) == 0 {
 			continue
 		}
 
-		policies = append(policies, policiesFromRole...)
+		policies = append(policies, policySet.RequireSessionJoin...)
 	}
 
 	return policies
@@ -148,9 +146,9 @@ func (e *SessionAccessEvaluator) matchesJoin(allow *types.SessionJoinPolicy) boo
 		return false
 	}
 
-	for _, requireRole := range e.roles {
+	for _, policySet := range e.policySets {
 		for _, allowRole := range allow.Roles {
-			expr := utils.GlobToRegexp(requireRole.GetName())
+			expr := utils.GlobToRegexp(policySet.Name)
 			// GlobToRegexp makes sure this is always a valid regexp.
 			matched, _ := regexp.MatchString(expr, allowRole)
 
@@ -282,14 +280,14 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 // We don't need this fallback behaviour for multiparty kubernetes since it's a new feature.
 func (e *SessionAccessEvaluator) supportsSessionAccessControls() (bool, error) {
 	if e.kind == types.SSHSessionKind {
-		for _, role := range e.roles {
-			switch role.GetVersion() {
+		for _, policySet := range e.policySets {
+			switch policySet.Version {
 			case types.V1, types.V2, types.V3, types.V4:
 				return false, nil
 			case types.V5:
 				return true, nil
 			default:
-				return false, trace.BadParameter("unsupported role version: %v", role.GetVersion())
+				return false, trace.BadParameter("unsupported role version: %v", policySet.Version)
 			}
 		}
 	}

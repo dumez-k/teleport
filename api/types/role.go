@@ -146,6 +146,8 @@ type Role interface {
 	GetSessionJoinPolicies() []*SessionJoinPolicy
 	// SetSessionJoinPolicies sets the RBAC join policies for a session.
 	SetSessionJoinPolicies([]*SessionJoinPolicy)
+	// GetSessionPolicySet returns the RBAC policy set for a role.
+	GetSessionPolicySet() SessionTrackerPolicySet
 }
 
 // NewRole constructs new standard role
@@ -1074,22 +1076,31 @@ func (e WhereExpr) String() string {
 	return ""
 }
 
-// GetSessionRequirePolicies returns the RBAC required policies for a session.
+// GetSessionRequirePolicies returns the RBAC required policies for a role.
 func (r *RoleV5) GetSessionRequirePolicies() []*SessionRequirePolicy {
 	return r.Spec.Allow.RequireSessionJoin
 }
 
-// SetSessionRequirePolicies sets the RBAC required policies for a session.
+// GetSessionPolicySet returns the RBAC policy set for a session.
+func (r *RoleV5) GetSessionPolicySet() SessionTrackerPolicySet {
+	return SessionTrackerPolicySet{
+		Name:               r.Metadata.Name,
+		Version:            r.Version,
+		RequireSessionJoin: r.Spec.Allow.RequireSessionJoin,
+	}
+}
+
+// SetSessionRequirePolicies sets the RBAC required policies for a role.
 func (r *RoleV5) SetSessionRequirePolicies(policies []*SessionRequirePolicy) {
 	r.Spec.Allow.RequireSessionJoin = policies
 }
 
-// SetSessionJoinPolicies returns the RBAC join policies for a session.
+// SetSessionJoinPolicies returns the RBAC join policies for a role.
 func (r *RoleV5) GetSessionJoinPolicies() []*SessionJoinPolicy {
 	return r.Spec.Allow.JoinSessions
 }
 
-// SetSessionJoinPolicies sets the RBAC join policies for a session.
+// SetSessionJoinPolicies sets the RBAC join policies for a role.
 func (r *RoleV5) SetSessionJoinPolicies(policies []*SessionJoinPolicy) {
 	r.Spec.Allow.JoinSessions = policies
 }

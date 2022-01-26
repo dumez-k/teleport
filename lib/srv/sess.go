@@ -684,7 +684,11 @@ func newSession(id rsession.ID, r *SessionRegistry, ctx *ServerContext) (*sessio
 		r.log.Errorf("Failed to create new session: %v.", err)
 	}
 
-	initiator := []types.Role(ctx.Identity.RoleSet)
+	var policySets []*types.SessionTrackerPolicySet
+	for _, role := range ctx.Identity.RoleSet {
+		policySet := role.GetSessionPolicySet()
+		policySets = append(policySets, &policySet)
+	}
 
 	sess := &session{
 		log: log.WithFields(log.Fields{
@@ -700,14 +704,14 @@ func newSession(id rsession.ID, r *SessionRegistry, ctx *ServerContext) (*sessio
 		startTime:       startTime,
 		serverCtx:       ctx.srv.Context(),
 		state:           types.SessionState_SessionStatePending,
-		access:          auth.NewSessionAccessEvaluator(initiator, types.SSHSessionKind),
+		access:          auth.NewSessionAccessEvaluator(policySets, types.SSHSessionKind),
 		stateUpdate:     broadcast.NewBroadcaster(1),
 		scx:             ctx,
 		presenceEnabled: ctx.Identity.Certificate.Extensions[teleport.CertExtensionMFAVerified] != "",
 		io:              NewTermManager(),
 	}
 
-	err = sess.trackerCreate(ctx.Identity.TeleportUser, initiator)
+	err = sess.trackerCreate(ctx.Identity.TeleportUser, policySets)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -1663,7 +1667,7 @@ func (s *session) trackerGet() (types.SessionTracker, error) {
 	return sess, nil
 }
 
-func (s *session) trackerCreate(teleportUser string, hostRoles []types.Role) error {
+func (s *session) trackerCreate(teleportUser string, policySet []*types.SessionTrackerPolicySet) error {
 	if s.registry.auth == nil {
 		return nil
 	}
@@ -1682,30 +1686,20 @@ func (s *session) trackerCreate(teleportUser string, hostRoles []types.Role) err
 		return trace.Wrap(err)
 	}
 
-	hostRolesV5 := make([]*types.RoleV5, len(hostRoles))
-	for _, role := range hostRoles {
-		roleV5, ok := role.(*types.RoleV5)
-		if !ok {
-			return trace.BadParameter("Found unexpected role structure: %T", role)
-		}
-
-		hostRolesV5 = append(hostRolesV5, roleV5)
-	}
-
 	req := &proto.CreateSessionTrackerRequest{
-		ID:          s.id.String(),
-		Namespace:   apidefaults.Namespace,
-		Type:        string(types.KubernetesSessionKind),
-		Hostname:    s.registry.srv.GetInfo().GetHostname(),
-		Address:     s.scx.ServerConn.LocalAddr().String(),
-		ClusterName: s.scx.ClusterName,
-		Login:       "root",
-		Initiator:   initator,
-		Expires:     time.Now().UTC().Add(time.Hour * 24),
-		HostUser:    initator.User,
-		Reason:      reason,
-		Invited:     invited,
-		HostRoles:   hostRolesV5,
+		ID:           s.id.String(),
+		Namespace:    apidefaults.Namespace,
+		Type:         string(types.KubernetesSessionKind),
+		Hostname:     s.registry.srv.GetInfo().GetHostname(),
+		Address:      s.scx.ServerConn.LocalAddr().String(),
+		ClusterName:  s.scx.ClusterName,
+		Login:        "root",
+		Initiator:    initator,
+		Expires:      time.Now().UTC().Add(time.Hour * 24),
+		HostUser:     initator.User,
+		Reason:       reason,
+		Invited:      invited,
+		HostPolicies: policySet,
 	}
 
 	_, err = s.registry.auth.CreateSessionTracker(s.serverCtx, req)
