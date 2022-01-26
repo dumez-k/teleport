@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	broadcast "github.com/dustin/go-broadcast"
 	"github.com/google/uuid"
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/client/proto"
@@ -273,8 +272,8 @@ type session struct {
 
 	state types.SessionState
 
-	// stateUpdate is used to broadcast state updates to listers.
-	stateUpdate broadcast.Broadcaster
+	// stateUpdate is used to notify listeners about state updates
+	stateUpdate sync.Cond
 
 	accessEvaluator auth.SessionAccessEvaluator
 
@@ -340,7 +339,6 @@ func newSession(ctx authContext, forwarder *Forwarder, req *http.Request, params
 		log:               log,
 		io:                io,
 		state:             types.SessionState_SessionStatePending,
-		stateUpdate:       broadcast.NewBroadcaster(1),
 		accessEvaluator:   accessEvaluator,
 		emitter:           events.NewDiscardEmitter(),
 		tty:               utils.AsBool(q.Get("tty")),
@@ -367,15 +365,13 @@ func (s *session) waitOnAccess() {
 	s.io.Off()
 	s.io.BroadcastMessage("Session paused, Waiting for required participants...")
 
-	c := make(chan interface{})
-	s.stateUpdate.Register(c)
-	defer s.stateUpdate.Unregister(c)
-
 outer:
 	for {
-		state := <-c
-		actualState := state.(types.SessionState)
-		switch actualState {
+		s.mu.RLock()
+		state := s.state
+		s.mu.RUnlock()
+
+		switch state {
 		case types.SessionState_SessionStatePending:
 			continue
 		case types.SessionState_SessionStateTerminated:
@@ -383,6 +379,8 @@ outer:
 		case types.SessionState_SessionStateRunning:
 			break outer
 		}
+
+		s.stateUpdate.Wait()
 	}
 
 	s.io.BroadcastMessage("Resuming session...")
@@ -902,7 +900,7 @@ func (s *session) join(p *party) error {
 
 	if s.started && canStart {
 		s.state = types.SessionState_SessionStateRunning
-		s.stateUpdate.Submit(types.SessionState_SessionStateRunning)
+		s.stateUpdate.Broadcast()
 		return nil
 	}
 
@@ -1002,7 +1000,7 @@ func (s *session) leave(id uuid.UUID) error {
 			}()
 		} else {
 			s.state = types.SessionState_SessionStatePending
-			s.stateUpdate.Submit(types.SessionState_SessionStatePending)
+			s.stateUpdate.Broadcast()
 			go s.waitOnAccess()
 		}
 	}
@@ -1050,8 +1048,7 @@ func (s *session) Close() error {
 		s.io.BroadcastMessage("Closing session...")
 		s.state = types.SessionState_SessionStateTerminated
 		s.io.Close()
-		s.stateUpdate.Submit(types.SessionState_SessionStateTerminated)
-		s.stateUpdate.Close()
+		s.stateUpdate.Broadcast()
 		err := s.trackerUpdateState(types.SessionState_SessionStateTerminated)
 		if err != nil {
 			s.log.WithError(err).Error("Failed to mark session tracker as terminated.")

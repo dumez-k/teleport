@@ -43,7 +43,6 @@ import (
 	"github.com/gravitational/teleport/lib/sshutils"
 	"github.com/gravitational/teleport/lib/utils"
 
-	broadcast "github.com/dustin/go-broadcast"
 	"github.com/gravitational/trace"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
@@ -615,7 +614,7 @@ type session struct {
 
 	access auth.SessionAccessEvaluator
 
-	stateUpdate broadcast.Broadcaster
+	stateUpdate sync.Cond
 
 	initiator string
 
@@ -705,7 +704,6 @@ func newSession(id rsession.ID, r *SessionRegistry, ctx *ServerContext) (*sessio
 		serverCtx:       ctx.srv.Context(),
 		state:           types.SessionState_SessionStatePending,
 		access:          auth.NewSessionAccessEvaluator(policySets, types.SSHSessionKind),
-		stateUpdate:     broadcast.NewBroadcaster(1),
 		scx:             ctx,
 		presenceEnabled: ctx.Identity.Certificate.Extensions[teleport.CertExtensionMFAVerified] != "",
 		io:              NewTermManager(),
@@ -771,6 +769,7 @@ func (s *session) Close() error {
 				s.recorder.Close(s.serverCtx)
 			}
 			s.state = types.SessionState_SessionStateTerminated
+			s.stateUpdate.Broadcast()
 		}()
 	})
 	return nil
@@ -792,19 +791,13 @@ func (s *session) waitOnAccess() error {
 		log.WithError(err).Errorf("Failed to broadcast message.")
 	}
 
-	ch := make(chan interface{})
-	s.stateUpdate.Register(ch)
-	defer s.stateUpdate.Unregister(ch)
-
 outer:
 	for {
-		state, ok := <-ch
-		if !ok {
-			return trace.ConnectionProblem(nil, "session state update channel closed")
-		}
+		s.mu.RLock()
+		state := s.state
+		s.mu.RUnlock()
 
-		actualState := state.(types.SessionState)
-		switch actualState {
+		switch state {
 		case types.SessionState_SessionStatePending:
 			continue
 		case types.SessionState_SessionStateTerminated:
@@ -812,6 +805,8 @@ outer:
 		case types.SessionState_SessionStateRunning:
 			break outer
 		}
+
+		s.stateUpdate.Wait()
 	}
 
 	s.io.BroadcastMessage("Resuming session...")
@@ -820,8 +815,13 @@ outer:
 }
 
 func (s *session) launch(ctx *ServerContext) error {
+	s.mu.Lock()
+	defer s.mu.RUnlock()
+
 	s.io.BroadcastMessage("Launching session...")
-	s.stateUpdate.Submit(types.SessionState_SessionStateRunning)
+	s.state = types.SessionState_SessionStateRunning
+	s.stateUpdate.Broadcast()
+	s.trackerUpdateState(types.SessionState_SessionStateRunning)
 
 	// If the identity is verified with an MFA device, we enabled MFA-based presence for the session.
 	if s.presenceEnabled {
@@ -1311,7 +1311,7 @@ func (s *session) removeParty(p *party) error {
 
 	if !canRun {
 		s.state = types.SessionState_SessionStatePending
-		s.stateUpdate.Submit(types.SessionState_SessionStatePending)
+		s.stateUpdate.Broadcast()
 		go s.waitOnAccess()
 	}
 
