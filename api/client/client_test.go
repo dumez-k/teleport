@@ -22,10 +22,12 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gravitational/teleport/api/breaker"
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
@@ -40,26 +42,78 @@ import (
 
 // mockServer mocks an Auth Server.
 type mockServer struct {
+	addr string
 	grpc *grpc.Server
 	*proto.UnimplementedAuthServiceServer
 }
 
-func newMockServer() *mockServer {
+func newMockServer(addr string) *mockServer {
 	m := &mockServer{
-		grpc.NewServer(),
-		&proto.UnimplementedAuthServiceServer{},
+		addr:                           addr,
+		grpc:                           grpc.NewServer(),
+		UnimplementedAuthServiceServer: &proto.UnimplementedAuthServiceServer{},
 	}
 	proto.RegisterAuthServiceServer(m.grpc, m)
 	return m
 }
 
+func (m *mockServer) Stop() {
+	m.grpc.Stop()
+}
+
+func (m *mockServer) Addr() string {
+	return m.addr
+}
+
+type ConfigOpt func(*Config)
+
+func WithBreakerConfig(breakCfg breaker.Config) ConfigOpt {
+	return func(config *Config) {
+		config.BreakerConfig = breakCfg
+	}
+}
+
+func WithConfig(cfg Config) ConfigOpt {
+	return func(config *Config) {
+		*config = cfg
+	}
+}
+
+func (m *mockServer) NewClient(ctx context.Context, opts ...ConfigOpt) (*Client, error) {
+	cfg := Config{
+		Addrs: []string{m.addr},
+		Credentials: []Credentials{
+			&mockInsecureTLSCredentials{}, // TODO(Joerger) replace insecure credentials
+		},
+		DialOpts: []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO(Joerger) remove insecure dial option
+		},
+		BreakerConfig: breaker.Config{
+			Interval:      time.Second,
+			RecoveryLimit: 1,
+			Trip:          breaker.StaticTripper(false),
+		},
+	}
+
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	return New(ctx, cfg)
+}
+
 // startMockServer starts a new mock server. Parallel tests cannot use the same addr.
-func startMockServer(t *testing.T) string {
+func startMockServer(t *testing.T) *mockServer {
 	l, err := net.Listen("tcp", "")
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, l.Close()) })
-	go newMockServer().grpc.Serve(l)
-	return l.Addr().String()
+
+	srv := newMockServer(l.Addr().String())
+	t.Cleanup(srv.grpc.Stop)
+
+	go func() {
+		require.NoError(t, srv.grpc.Serve(l))
+	}()
+	return srv
 }
 
 func (m *mockServer) Ping(ctx context.Context, req *proto.PingRequest) (*proto.PingResponse, error) {
@@ -253,7 +307,7 @@ func (mc *mockInsecureTLSCredentials) SSHClientConfig() (*ssh.ClientConfig, erro
 func TestNew(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	addr := startMockServer(t)
+	srv := startMockServer(t)
 
 	tests := []struct {
 		desc      string
@@ -262,7 +316,7 @@ func TestNew(t *testing.T) {
 	}{{
 		desc: "successfully dial tcp address.",
 		config: Config{
-			Addrs: []string{addr},
+			Addrs: []string{srv.Addr()},
 			Credentials: []Credentials{
 				&mockInsecureTLSCredentials{}, // TODO(Joerger) replace insecure credentials
 			},
@@ -274,7 +328,7 @@ func TestNew(t *testing.T) {
 	}, {
 		desc: "synchronously dial addr/cred pairs and succeed with the 1 good pair.",
 		config: Config{
-			Addrs: []string{"bad addr", addr, "bad addr"},
+			Addrs: []string{"bad addr", srv.Addr(), "bad addr"},
 			Credentials: []Credentials{
 				&tlsConfigCreds{nil},
 				&mockInsecureTLSCredentials{}, // TODO(Joerger) replace insecure credentials
@@ -318,11 +372,11 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			clt, err := New(ctx, tt.config)
+			clt, err := srv.NewClient(ctx, WithConfig(tt.config))
 			tt.assertErr(t, err)
 
 			if err == nil {
-				defer clt.Close()
+				t.Cleanup(func() { require.NoError(t, clt.Close()) })
 				// requests to the server should succeed.
 				_, err = clt.Ping(ctx)
 				require.NoError(t, err)
@@ -338,7 +392,6 @@ func TestNewDialBackground(t *testing.T) {
 	// get listener but don't serve it yet.
 	l, err := net.Listen("tcp", "")
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, l.Close()) })
 	addr := l.Addr().String()
 
 	// Create client before the server is listening.
@@ -351,9 +404,13 @@ func TestNewDialBackground(t *testing.T) {
 		DialOpts: []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO(Joerger) remove insecure dial option
 		},
+		BreakerConfig: breaker.Config{
+			Interval: time.Second,
+			Trip:     breaker.StaticTripper(false),
+		},
 	})
 	require.NoError(t, err)
-	defer clt.Close()
+	t.Cleanup(func() { require.NoError(t, clt.Close()) })
 
 	// requests to the server will result in a connection error.
 	cancelCtx, cancel := context.WithTimeout(ctx, time.Second*3)
@@ -362,7 +419,11 @@ func TestNewDialBackground(t *testing.T) {
 	require.Error(t, err)
 
 	// Start the server and wait for the client connection to be ready.
-	go newMockServer().grpc.Serve(l)
+	srv := newMockServer(addr)
+	t.Cleanup(srv.Stop)
+	go func() {
+		require.NoError(t, srv.grpc.Serve(l))
+	}()
 	require.NoError(t, clt.waitForConnectionReady(ctx))
 
 	// requests to the server should succeed.
@@ -376,7 +437,6 @@ func TestWaitForConnectionReady(t *testing.T) {
 
 	l, err := net.Listen("tcp", "")
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, l.Close()) })
 	addr := l.Addr().String()
 
 	// Create client before the server is listening.
@@ -389,9 +449,13 @@ func TestWaitForConnectionReady(t *testing.T) {
 		DialOpts: []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO(Joerger) remove insecure dial option
 		},
+		BreakerConfig: breaker.Config{
+			Interval: time.Second,
+			Trip:     breaker.StaticTripper(false),
+		},
 	})
 	require.NoError(t, err)
-	defer clt.Close()
+	t.Cleanup(func() { require.NoError(t, clt.Close()) })
 
 	// WaitForConnectionReady should return false once the
 	// context is canceled if the server isn't open to connections.
@@ -400,29 +464,25 @@ func TestWaitForConnectionReady(t *testing.T) {
 	require.Error(t, clt.waitForConnectionReady(cancelCtx))
 
 	// WaitForConnectionReady should return nil if the server is open to connections.
-	go newMockServer().grpc.Serve(l)
+	srv := newMockServer(addr)
+	t.Cleanup(srv.Stop)
+	go func() {
+		require.NoError(t, srv.grpc.Serve(l))
+	}()
 	require.NoError(t, clt.waitForConnectionReady(ctx))
 
 	// WaitForConnectionReady should return an error if the grpc connection is closed.
-	require.NoError(t, clt.GetConnection().Close())
+	require.NoError(t, clt.Close())
 	require.Error(t, clt.waitForConnectionReady(ctx))
 }
 
 func TestLimitExceeded(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	addr := startMockServer(t)
+	srv := startMockServer(t)
 
 	// Create client
-	clt, err := New(ctx, Config{
-		Addrs: []string{addr},
-		Credentials: []Credentials{
-			&mockInsecureTLSCredentials{}, // TODO(Joerger) replace insecure credentials
-		},
-		DialOpts: []grpc.DialOption{
-			grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO(Joerger) remove insecure dial option
-		},
-	})
+	clt, err := srv.NewClient(ctx)
 	require.NoError(t, err)
 
 	// ListNodes should return a limit exceeded error when exceeding gRPC message size limit.
@@ -456,7 +516,7 @@ func TestLimitExceeded(t *testing.T) {
 func TestListResources(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	addr := startMockServer(t)
+	srv := startMockServer(t)
 
 	testCases := map[string]struct {
 		resourceType   string
@@ -481,15 +541,7 @@ func TestListResources(t *testing.T) {
 	}
 
 	// Create client
-	clt, err := New(ctx, Config{
-		Addrs: []string{addr},
-		Credentials: []Credentials{
-			&mockInsecureTLSCredentials{}, // TODO(Joerger) replace insecure credentials
-		},
-		DialOpts: []grpc.DialOption{
-			grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO(Joerger) remove insecure dial option
-		},
-	})
+	clt, err := srv.NewClient(ctx)
 	require.NoError(t, err)
 
 	for name, test := range testCases {
@@ -519,18 +571,10 @@ func TestListResources(t *testing.T) {
 func TestGetResources(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	addr := startMockServer(t)
+	srv := startMockServer(t)
 
 	// Create client
-	clt, err := New(ctx, Config{
-		Addrs: []string{addr},
-		Credentials: []Credentials{
-			&mockInsecureTLSCredentials{}, // TODO(Joerger) replace insecure credentials
-		},
-		DialOpts: []grpc.DialOption{
-			grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO(Joerger) remove insecure dial option
-		},
-	})
+	clt, err := srv.NewClient(ctx)
 	require.NoError(t, err)
 
 	testCases := map[string]struct {
@@ -569,5 +613,74 @@ func TestGetResources(t *testing.T) {
 			require.Len(t, resources, len(expectedResources))
 			require.Empty(t, cmp.Diff(expectedResources, resources))
 		})
+	}
+}
+
+func TestClient_TooManyErrorsClosesClient(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	srv := startMockServer(t)
+
+	var lock sync.RWMutex
+	closed := require.False
+	// Create client
+	clt, err := srv.NewClient(ctx, WithBreakerConfig(breaker.Config{
+		Interval:      time.Minute,
+		RecoveryLimit: 1,
+		Trip:          breaker.ConsecutiveFailureTripper(5),
+		OnTripped: func() {
+			lock.Lock()
+			defer lock.Unlock()
+			closed = require.True
+		},
+	}))
+	require.NoError(t, err)
+
+	for i := uint32(0); i < 10; i++ {
+		_, _, err = clt.ListResources(ctx, proto.ListResourcesRequest{
+			Namespace:    defaults.Namespace,
+			Limit:        1,
+			ResourceType: types.KindDatabaseServer,
+		})
+		require.NoError(t, err)
+	}
+
+	require.False(t, clt.isClosed())
+	srv.Stop()
+	require.False(t, clt.isClosed())
+
+	for i := uint32(0); i < 10; i++ {
+		_, _, err = clt.ListResources(ctx, proto.ListResourcesRequest{
+			Namespace:    defaults.Namespace,
+			Limit:        1,
+			ResourceType: types.KindDatabaseServer,
+		})
+		require.Error(t, err)
+
+		lock.RLock()
+		closed(t, clt.isClosed(), "step %d", i)
+		lock.RUnlock()
+	}
+
+	require.True(t, clt.isClosed())
+}
+
+func TestClient_NotAllErrorsTripBreaker(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	srv := startMockServer(t)
+
+	clt, err := srv.NewClient(ctx)
+	require.NoError(t, err)
+
+	srv.Stop()
+
+	for {
+		_, _, err = clt.ListResources(ctx, proto.ListResourcesRequest{
+			ResourceType: types.KindDatabaseServer,
+			Namespace:    defaults.Namespace,
+			Limit:        1,
+		})
+		require.Error(t, err)
 	}
 }

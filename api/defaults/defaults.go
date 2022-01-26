@@ -48,6 +48,12 @@ const (
 	// deviation added to this time to avoid lots of simultaneous
 	// heartbeats coming to auth server
 	ServerAnnounceTTL = 600 * time.Second
+
+	// ErrorRatio is the number of errors needed to trigger the callback
+	ErrorRatio = 0.5
+
+	// BreakerInterval is the period in which to look for errors
+	BreakerInterval = time.Minute
 )
 
 var (
