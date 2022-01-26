@@ -32,8 +32,8 @@ import (
 // and if a user can join a session.
 //
 // The current implementation is very simple and uses a brute-force algorithm.
-// More efficient implementations that run in non O(n^2)-ish time a possible but require complex
-// and non intuitive code.
+// More efficient implementations that run in non O(n^2)-ish time are possible but require complex code
+// that is harder to debug in the case of misconfigured policies or other error and are harder to intuitively follow.
 // In the real world, the number of roles and session are small enough that this doesn't have a meaningful impact.
 type SessionAccessEvaluator struct {
 	kind     types.SessionKind
@@ -78,7 +78,7 @@ func getAllowPolicies(participant SessionAccessContext) []*types.SessionJoinPoli
 	return policies
 }
 
-func contains(s []string, e types.SessionKind) bool {
+func containsKind(s []string, e types.SessionKind) bool {
 	for _, a := range s {
 		if types.SessionKind(a) == e {
 			return true
@@ -164,7 +164,7 @@ func (e *SessionAccessEvaluator) matchesJoin(allow *types.SessionJoinPolicy) boo
 }
 
 func (e *SessionAccessEvaluator) matchesKind(allow []string) bool {
-	if contains(allow, e.kind) || contains(allow, "*") {
+	if containsKind(allow, e.kind) || containsKind(allow, "*") {
 		return true
 	}
 
@@ -179,13 +179,17 @@ func (e *SessionAccessEvaluator) CanJoin(user SessionAccessContext) ([]types.Ses
 		return nil, trace.Wrap(err)
 	}
 
+	// If we don't support session access controls, return the default mode set that was supported prior to Moderated Sessions.
 	if !supported {
 		return preAccessControlsModes(e.kind), nil
 	}
 
 	var modes []types.SessionParticipantMode
 
+	// Loop over every allow policy attached the participant and check it's applicability.
+	// This code serves to merge the permissions of all applicable join policies.
 	for _, allowPolicy := range getAllowPolicies(user) {
+		// If the policy is applicable and allows joining the session, add the allowed modes to the list of modes.
 		if e.matchesJoin(allowPolicy) {
 			for _, modeString := range allowPolicy.Modes {
 				mode := types.SessionParticipantMode(modeString)
@@ -220,27 +224,37 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 		return false, PolicyOptions{}, trace.Wrap(err)
 	}
 
+	// If advanced access controls are supported or no require policies are defined, we allow by default.
 	if len(e.requires) == 0 || !supported {
-		return true, PolicyOptions{}, nil
+		return true, PolicyOptions{TerminateOnLeave: true}, nil
 	}
 
+	// Check every require policy to see if it's fulfilled.
+	// Only one needs to be checked to allow the session.
 	for _, requirePolicy := range e.requires {
+		// Count of how many additional participant matches we need to fulfill the policy.
 		left := requirePolicy.Count
 
+		// Check every participant against the policy.
 		for _, participant := range participants {
+			// Check the allow polices attached to the participant against the session.
 			allowPolicies := getAllowPolicies(participant)
 			for _, allowPolicy := range allowPolicies {
+				// Evaluate the filter in the require policy against the participant and allow policy.
 				matchesPredicate, err := e.matchesPredicate(&participant, requirePolicy, allowPolicy)
 				if err != nil {
 					return false, PolicyOptions{}, trace.Wrap(err)
 				}
 
+				// If the the filter matches the participant and the allow policy matches the session
+				// we conclude that the participant matches against the require policy.
 				if matchesPredicate && e.matchesJoin(allowPolicy) {
 					left--
 					break
 				}
 			}
 
+			// If we've matched enough participants against the require policy, we can allow the session.
 			if left <= 0 {
 				options := PolicyOptions{}
 
