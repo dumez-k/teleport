@@ -1339,7 +1339,7 @@ func TestIsMFARequiredUnauthorized(t *testing.T) {
 	require.False(t, resp.Required)
 }
 
-// TestRoleVersions tests that downgraded V3 roles are returned to older
+// TestRoleVersions tests that downgraded V4 roles are returned to older
 // clients, and V5 roles are returned to newer clients.
 func TestRoleVersions(t *testing.T) {
 	srv := newTestTLSServer(t)

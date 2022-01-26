@@ -17,12 +17,13 @@ limitations under the License.
 package auth
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/services"
+	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
-	"github.com/ryanuber/go-glob"
 	"github.com/vulcand/predicate"
 )
 
@@ -149,7 +150,9 @@ func (e *SessionAccessEvaluator) matchesJoin(allow *types.SessionJoinPolicy) boo
 
 	for _, requireRole := range e.roles {
 		for _, allowRole := range allow.Roles {
-			matched := glob.Glob(requireRole.GetName(), allowRole)
+			expr := utils.GlobToRegexp(requireRole.GetName())
+			// GlobToRegexp makes sure this is always a valid regexp.
+			matched, _ := regexp.MatchString(expr, allowRole)
 
 			if matched {
 				return true

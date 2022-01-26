@@ -24,6 +24,7 @@ import (
 )
 
 type startTestCase struct {
+	name         string
 	host         types.Role
 	sessionKind  types.SessionKind
 	participants []SessionAccessContext
@@ -50,6 +51,7 @@ func successStartTestCase(t *testing.T) startTestCase {
 	}})
 
 	return startTestCase{
+		name:        "success",
 		host:        hostRole,
 		sessionKind: types.SSHSessionKind,
 		participants: []SessionAccessContext{
@@ -85,6 +87,7 @@ func failCountStartTestCase(t *testing.T) startTestCase {
 	}})
 
 	return startTestCase{
+		name:        "failCount",
 		host:        hostRole,
 		sessionKind: types.SSHSessionKind,
 		participants: []SessionAccessContext{
@@ -120,6 +123,7 @@ func failFilterStartTestCase(t *testing.T) startTestCase {
 	}})
 
 	return startTestCase{
+		name:        "failFilter",
 		host:        hostRole,
 		sessionKind: types.SSHSessionKind,
 		participants: []SessionAccessContext{
@@ -144,14 +148,17 @@ func TestSessionAccessStart(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
-		result, _, err := evaluator.FulfilledFor(testCase.participants)
-		require.NoError(t, err)
-		require.Equal(t, testCase.expected, result)
+		t.Run(testCase.name, func(t *testing.T) {
+			evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
+			result, _, err := evaluator.FulfilledFor(testCase.participants)
+			require.NoError(t, err)
+			require.Equal(t, testCase.expected, result)
+		})
 	}
 }
 
 type joinTestCase struct {
+	name        string
 	host        types.Role
 	sessionKind types.SessionKind
 	participant SessionAccessContext
@@ -171,6 +178,7 @@ func successJoinTestCase(t *testing.T) joinTestCase {
 	}})
 
 	return joinTestCase{
+		name:        "success",
 		host:        hostRole,
 		sessionKind: types.SSHSessionKind,
 		participant: SessionAccessContext{
@@ -188,6 +196,7 @@ func failRoleJoinTestCase(t *testing.T) joinTestCase {
 	require.NoError(t, err)
 
 	return joinTestCase{
+		name:        "failRole",
 		host:        hostRole,
 		sessionKind: types.SSHSessionKind,
 		participant: SessionAccessContext{
@@ -211,6 +220,7 @@ func failKindJoinTestCase(t *testing.T) joinTestCase {
 	}})
 
 	return joinTestCase{
+		name:        "failKind",
 		host:        hostRole,
 		sessionKind: types.SSHSessionKind,
 		participant: SessionAccessContext{
@@ -229,9 +239,11 @@ func TestSessionAccessJoin(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
-		result, err := evaluator.CanJoin(testCase.participant)
-		require.NoError(t, err)
-		require.Equal(t, testCase.expected, len(result) > 0)
+		t.Run(testCase.name, func(t *testing.T) {
+			evaluator := NewSessionAccessEvaluator([]types.Role{testCase.host}, testCase.sessionKind)
+			result, err := evaluator.CanJoin(testCase.participant)
+			require.NoError(t, err)
+			require.Equal(t, testCase.expected, len(result) > 0)
+		})
 	}
 }

@@ -86,11 +86,13 @@ outer:
 }
 
 func solveMFA(ctx context.Context, term io.Writer, tc *TeleportClient, challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
-	_, err := term.Write([]byte("\r\nTeleport > Please tap your MFA key within 15 seconds\r\n"))
+	_, err := term.Write([]byte("\r\nTeleport > Please tap your MFA key\r\n"))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
+	// This is here to enforce the usage of an U2F or WebAuthn device.
+	// We don't support TOTP for live presence.
 	challenge.TOTP = nil
 
 	response, err := PromptMFAChallenge(ctx, tc.Config.WebProxyAddr, challenge, "", true)

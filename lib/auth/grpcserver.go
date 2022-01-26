@@ -1538,11 +1538,11 @@ func (g *GRPCServer) DeleteAllKubeServices(ctx context.Context, req *proto.Delet
 
 // downgradeRole tests the client version passed through the GRPC metadata, and
 // if the client version is unknown or less than the minimum supported version
-// for V4 roles returns a shallow copy of the given role downgraded to V3. If
-// the passed in role is already V3, it is returned unmodified.
+// for V5 roles returns a shallow copy of the given role downgraded to V4, If
+// the passed in role is already V4, it is returned unmodified.
 func downgradeRole(ctx context.Context, role *types.RoleV5) (*types.RoleV5, error) {
-	if role.Version == types.V3 {
-		// role is already V3, no need to downgrade
+	if role.Version == types.V4 {
+		// role is already V4, no need to downgrade
 		return role, nil
 	}
 
@@ -1556,9 +1556,9 @@ func downgradeRole(ctx context.Context, role *types.RoleV5) (*types.RoleV5, erro
 		}
 	}
 
-	minSupportedVersionForV4Roles := semver.New(utils.VersionBeforeAlpha("6.2.4"))
-	if clientVersion == nil || clientVersion.LessThan(*minSupportedVersionForV4Roles) {
-		log.Debugf(`Client version "%s" is unknown or less than 6.2.4, converting role to v3`, clientVersionString)
+	minSupportedVersionForV5Roles := semver.New(utils.VersionBeforeAlpha("8.2.0"))
+	if clientVersion == nil || clientVersion.LessThan(*minSupportedVersionForV5Roles) {
+		log.Debugf(`Client version "%s" is unknown or less than 6.2.4, converting role to v4`, clientVersionString)
 		downgraded, err := services.DowngradeRoleToV4(role)
 		if err != nil {
 			return nil, trace.Wrap(err)

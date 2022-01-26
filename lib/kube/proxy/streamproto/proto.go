@@ -19,6 +19,7 @@ package streamproto
 import (
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -66,8 +67,8 @@ type SessionStream struct {
 
 	writeSync   sync.Mutex
 	done        chan struct{}
-	closedC     sync.Once
-	closed      bool
+	closeOnce   sync.Once
+	closed      int32
 	MFARequired bool
 	Mode        types.SessionParticipantMode
 }
@@ -157,10 +158,14 @@ func NewSessionStream(conn *websocket.Conn, handshake interface{}) (*SessionStre
 
 func (s *SessionStream) readTask() {
 	for {
-		terminated := false
-		defer s.closedC.Do(func() { close(s.done) })
+		defer s.closeOnce.Do(func() { close(s.done) })
+
 		ty, data, err := s.conn.ReadMessage()
 		if err != nil {
+			if err != io.EOF {
+				log.WithError(err).Warn("Failed to read message from websocket")
+			}
+
 			return
 		}
 
@@ -178,15 +183,14 @@ func (s *SessionStream) readTask() {
 				s.resizeQueue <- msg.Resize
 			}
 
-			if msg.ForceTerminate && !terminated {
-				terminated = true
+			if msg.ForceTerminate {
 				close(s.forceTerminate)
 			}
 		}
 
 		if ty == websocket.CloseMessage {
 			s.conn.Close()
-			s.closed = true
+			atomic.StoreInt32(&s.closed, 1)
 			return
 		}
 	}
@@ -262,8 +266,8 @@ func (s *SessionStream) Done() <-chan struct{} {
 
 // Close closes the stream.
 func (s *SessionStream) Close() error {
-	if !s.closed {
-		s.closed = true
+	if atomic.LoadInt32(&s.closed) == 0 {
+		atomic.StoreInt32(&s.closed, 1)
 
 		err := s.conn.WriteMessage(websocket.CloseMessage, []byte{})
 		if err != nil {
@@ -273,6 +277,7 @@ func (s *SessionStream) Close() error {
 		select {
 		case <-s.done:
 		case <-time.After(time.Second * 5):
+			s.conn.Close()
 		}
 	}
 

@@ -750,7 +750,7 @@ func (s *session) Close() error {
 			s.log.Infof("Closing session %v.", s.id)
 			err := s.trackerUpdateState(types.SessionState_SessionStateTerminated)
 			if s.term != nil {
-				s.term.Kill()
+				s.term.Close()
 			}
 			if err != nil {
 				s.log.WithError(err).Errorf("Failed to update tracker state.")
@@ -823,6 +823,7 @@ func (s *session) launch(ctx *ServerContext) error {
 	if s.presenceEnabled {
 		go func() {
 			ticker := time.NewTicker(PresenceVerifyInterval)
+			defer ticker.Stop()
 		outer:
 			for {
 				select {
@@ -993,8 +994,6 @@ func (s *session) launch(ctx *ServerContext) error {
 // startInteractive starts a new interactive process (or a shell) in the
 // current session.
 func (s *session) startInteractive(ch ssh.Channel, ctx *ServerContext) error {
-	var err error
-
 	// create a new "party" (connected client)
 	p := newParty(s, ch, ctx)
 
@@ -1029,7 +1028,7 @@ func (s *session) startInteractive(ch ssh.Channel, ctx *ServerContext) error {
 	s.inWriter = inWriter
 	s.io.AddReader("reader", inReader)
 	s.io.AddWriter("session-recorder", utils.WriteCloserWithContext(ctx.srv.Context(), s.recorder))
-	err = s.io.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", s.id))
+	err := s.io.BroadcastMessage(fmt.Sprintf("Creating session with ID: %v...", s.id))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1571,95 +1570,6 @@ func (s *session) getParties() (parties []*party) {
 		parties = append(parties, p)
 	}
 	return parties
-}
-
-func NewMultiWriter() *MultiWriter {
-	return &MultiWriter{writers: make(map[string]writerWrapper)}
-}
-
-type MultiWriter struct {
-	mu           sync.RWMutex
-	writers      map[string]writerWrapper
-	recentWrites [][]byte
-	OnError      func(string, error)
-}
-
-type writerWrapper struct {
-	io.WriteCloser
-	closeOnError bool
-	id           string
-}
-
-func (m *MultiWriter) AddWriter(id string, w io.WriteCloser, closeOnError bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.writers[id] = writerWrapper{WriteCloser: w, closeOnError: closeOnError, id: id}
-}
-
-func (m *MultiWriter) DeleteWriter(id string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.writers, id)
-}
-
-func (m *MultiWriter) lockedAddRecentWrite(p []byte) {
-	// make a copy of it (this slice is based on a shared buffer)
-	clone := make([]byte, len(p))
-	copy(clone, p)
-	// add to the list of recent writes
-	m.recentWrites = append(m.recentWrites, clone)
-	for len(m.recentWrites) > instantReplayLen {
-		m.recentWrites = m.recentWrites[1:]
-	}
-}
-
-// Write multiplexes the input to multiple sub-writers. The entire point
-// of multiWriter is to do this
-func (m *MultiWriter) Write(p []byte) (n int, err error) {
-	// lock and make a local copy of available writers:
-	getWriters := func() (writers []writerWrapper) {
-		m.mu.RLock()
-		defer m.mu.RUnlock()
-		writers = make([]writerWrapper, 0, len(m.writers))
-		for _, w := range m.writers {
-			writers = append(writers, w)
-		}
-
-		// add the recent write chunk to the "instant replay" buffer
-		// of the session, to be replayed to newly joining parties:
-		m.lockedAddRecentWrite(p)
-		return writers
-	}
-
-	// unlock and multiplex the write to all writers:
-	for _, w := range getWriters() {
-		n, err = w.Write(p)
-		if err != nil {
-			if m.OnError != nil {
-				m.OnError(w.id, err)
-			}
-
-			if w.closeOnError {
-				return
-			}
-			continue
-		}
-		if n != len(p) {
-			err = io.ErrShortWrite
-			return
-		}
-	}
-	return len(p), nil
-}
-
-func (m *MultiWriter) GetRecentWrites() []byte {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	data := make([]byte, 0, 1024)
-	for i := range m.recentWrites {
-		data = append(data, m.recentWrites[i]...)
-	}
-	return data
 }
 
 type party struct {

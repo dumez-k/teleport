@@ -293,7 +293,7 @@ func (s *sessionTracker) removeSessionFromList(ctx context.Context, sessionID st
 	}
 
 	if !found {
-		return trace.BadParameter("session %v not found in list", sessionID)
+		return trace.NotFound("session %v not found in list", sessionID)
 	}
 
 	listJSON, err := utils.FastMarshal(list)
