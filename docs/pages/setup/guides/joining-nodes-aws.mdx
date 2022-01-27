@@ -4,10 +4,14 @@ description: How to join nodes and proxies on EC2
 h1: Joining Node and Proxies in AWS
 ---
 
-This section will explain how to set up Teleport Nodes and Proxies to join your
+This section will explain how to set up Teleport nodes and Proxies to join your
 Teleport cluster with the EC2 join method. The EC2 join method enables you to
 allow Teleport nodes to join your Teleport cluster from EC2 instances in your
 AWS account without sharing any secrets.
+
+<Details title="Teleport Cloud Warning" scopeOnly={true} scope={["cloud"]}>
+Since it is not currently possible to make AWS credentials available to an Auth Service running on Teleport Cloud, Teleport Cloud does not support the EC2 join method.
+</Details>
 
 ## Prerequisites
 
@@ -15,7 +19,7 @@ AWS account without sharing any secrets.
 - A running self-hosted Teleport cluster.
 - AWS EC2 instance with Teleport installed.
 
-## Step 1/4. Setup AWS permissions for your Auth server
+## Step 1/4. Set up AWS permissions for your Auth Server
 
 Teleport Auth needs permission to call `ec2:DescribeInstances` in order to check
 that the EC2 instances attempting to join your cluster are legitimate and
@@ -54,13 +58,13 @@ teleport through a shared configuration file or environment variables, see
 https://aws.github.io/aws-sdk-go-v2/docs/configuring-sdk/#specifying-credentials
 for details.
 
-## Step 2/4. Create the AWS Node Joining Token
+## Step 2/4. Create the AWS node joining token
 
 Configure your Teleport auth server with a special dynamic token which will
 allow nodes from your AWS account to join your Teleport cluster. Nodes will
 prove that they are running in your AWS account by sending a signed EC2 Instance
-Identity Document which matches an allow rule configured in your AWS Node
-Joining Token.
+Identity Document which matches an allow rule configured in your AWS node
+joining token.
 
 Create the following `token.yaml` with an `allow` rule specifying your AWS
 account and the AWS regions in which your EC2 instances will run.
@@ -94,7 +98,7 @@ spec:
 
 Run `tctl create token.yaml` to create the token on the auth server.
 
-## Step 3/4. Configure your Nodes
+## Step 3/4. Configure your nodes
 
 The EC2 join method can be used for Teleport services running SSH, Proxy,
 Kubernetes, Application, or Database roles. The service should be run directly
@@ -121,10 +125,10 @@ proxy_service:
   enabled: no
 ```
 
-## Step 4/4. Launch your Teleport Node
+## Step 4/4. Launch your Teleport node
 
-When launching your first Node, you may need to temporarily configure a higher
-`aws_iid_ttl` value in the AWS Node Joining token so that you have time
+When launching your first node, you may need to temporarily configure a higher
+`aws_iid_ttl` value in the AWS node joining token so that you have time
 to get Teleport set up and configured. This feature works best once Teleport is
 configured in an EC2 AMI to start automatically on launch. You can edit the
 `aws_iid_ttl` value by editing the token yaml file and re-running `tctl create
@@ -135,7 +139,7 @@ your cluster. You're all set!
 
 ## Next Steps
 
-### Configuring AWS Node Joining for Multiple AWS Accounts
+### Configuring AWS node joining for multiple AWS accounts
 
 In order for Teleport nodes to join from EC2 instances in AWS accounts other
 than the account in which your Teleport auth server is running, Teleport must
@@ -181,7 +185,7 @@ In the AWS account where your Teleport auth server is running:
 2. Attach this `teleport-AssumeRole-policy` to the IAM role your Teleport auth
    server has credentials for, see [Step 1.2](#step-12-attach-the-iam-policy).
 
-When creating the AWS Node Joining token, include an allow rule for each foreign
+When creating the AWS node joining token, include an allow rule for each foreign
 account and specify the AWS ARN for the foreign
 `teleport-DescribeInstances-role`.
 
