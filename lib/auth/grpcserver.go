@@ -1650,6 +1650,57 @@ func (g *GRPCServer) DeleteRole(ctx context.Context, req *proto.DeleteRoleReques
 	return &empty.Empty{}, nil
 }
 
+// doMFAPresenceChallenge conducts an MFA presence challenge over a stream
+// and updates the users presence for a given session.
+//
+// This function bypasses the `ServerWithRoles` RBAC layer. This is not
+// usually how the GRPC layer accesses the underlying auth server API's but it's done
+// here to avoid bloating the ClientI interface with special logic that isn't designed to be touched
+// by anyone external to this process. This is not the norm and caution should be taken
+// when looking at or modifying this function. This is the same approach taken by other MFA
+// related GRPC API endpoints.
+func doMFAPresenceChallenge(ctx context.Context, actx *grpcContext, stream proto.AuthService_MaintainSessionPresenceServer, challengeReq *proto.PresenceMFAChallengeRequest) error {
+	user := actx.User.GetName()
+	u2fStorage, err := u2f.InMemoryAuthenticationStorage(actx.authServer.Identity)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	authChallenge, err := actx.authServer.mfaAuthChallenge(ctx, user, u2fStorage)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if len(authChallenge.U2F) == 0 && authChallenge.WebauthnChallenge == nil {
+		return trace.BadParameter("no U2F or WebAuthn devices registered for %q", user)
+	}
+
+	if err := stream.Send(authChallenge); err != nil {
+		return trace.Wrap(err)
+	}
+
+	resp, err := stream.Recv()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	challengeResp := resp.GetChallengeResponse()
+	if challengeResp == nil {
+		return trace.BadParameter("expected MFAAuthenticateResponse, got %T", challengeResp)
+	}
+
+	if _, err := actx.authServer.validateMFAAuthResponse(ctx, user, challengeResp, u2fStorage); err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = actx.authServer.UpdatePresence(ctx, challengeReq.SessionID, user)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	return nil
+}
+
 // MaintainSessionPresence establishes a channel used to continuously verify the presence for a session.
 func (g *GRPCServer) MaintainSessionPresence(stream proto.AuthService_MaintainSessionPresenceServer) error {
 	ctx := stream.Context()
@@ -1673,40 +1724,7 @@ func (g *GRPCServer) MaintainSessionPresence(stream proto.AuthService_MaintainSe
 			return trace.BadParameter("expected PresenceMFAChallengeRequest, got %T", req)
 		}
 
-		user := actx.User.GetName()
-		u2fStorage, err := u2f.InMemoryAuthenticationStorage(actx.authServer.Identity)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		authChallenge, err := actx.authServer.mfaAuthChallenge(ctx, user, u2fStorage)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		if len(authChallenge.U2F) == 0 && authChallenge.WebauthnChallenge == nil {
-			return trace.BadParameter("no U2F or WebAuthn devices registered for %q", user)
-		}
-
-		if err := stream.Send(authChallenge); err != nil {
-			return trace.Wrap(err)
-		}
-
-		resp, err := stream.Recv()
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		challengeResp := resp.GetChallengeResponse()
-		if challengeReq == nil {
-			return trace.BadParameter("expected MFAAuthenticateResponse, got %T", req)
-		}
-
-		if _, err := actx.authServer.validateMFAAuthResponse(ctx, user, challengeResp, u2fStorage); err != nil {
-			return trace.Wrap(err)
-		}
-
-		err = actx.authServer.UpdatePresence(ctx, challengeReq.SessionID, user)
+		err = doMFAPresenceChallenge(ctx, actx, stream, challengeReq)
 		if err != nil {
 			return trace.Wrap(err)
 		}
