@@ -891,8 +891,12 @@ func (s *session) join(p *party) error {
 	s.stateUpdate.L.Lock()
 	defer s.stateUpdate.L.Unlock()
 
-	if s.state != types.SessionState_SessionStatePending {
+	switch s.state {
+	case types.SessionState_SessionStateRunning:
 		return nil
+	case types.SessionState_SessionStatePending:
+	case types.SessionState_SessionStateTerminated:
+		return trace.AccessDenied("The requested session is not active")
 	}
 
 	canStart, _, err := s.canStart()
