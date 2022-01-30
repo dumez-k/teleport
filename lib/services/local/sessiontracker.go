@@ -26,13 +26,10 @@ import (
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
 	sessionPrefix               = "session_tracker"
-	sessionList                 = "list"
-	gcDelay       time.Duration = time.Minute * 5
 	retryDelay    time.Duration = time.Second
 )
 
@@ -41,27 +38,7 @@ type sessionTracker struct {
 }
 
 func NewSessionTrackerService(bk backend.Backend) (services.SessionTrackerService, error) {
-	_, err := bk.Get(context.TODO(), backend.Key(sessionPrefix, sessionList))
-	if trace.IsNotFound(err) {
-		err := createList(bk)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-	} else if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
 	return &sessionTracker{bk}, nil
-}
-
-func createList(bk backend.Backend) error {
-	data := []byte("[]")
-	_, err := bk.Create(context.TODO(), backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: data})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (s *sessionTracker) loadSession(ctx context.Context, sessionID string) (types.SessionTracker, error) {
@@ -100,9 +77,12 @@ func (s *sessionTracker) UpdatePresence(ctx context.Context, sessionID, user str
 	item := backend.Item{Key: backend.Key(sessionPrefix, sessionID), Value: sessionJSON}
 	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
 	if trace.IsCompareFailed(err) {
-		log.Infof("Session resource %v presence update failed, retrying: %v", sessionID, err)
-		time.Sleep(retryDelay)
-		return s.UpdatePresence(ctx, sessionID, user)
+		select {
+		case <-ctx.Done():
+			return trace.Wrap(ctx.Err())
+		case <-time.After(retryDelay):
+			return s.UpdatePresence(ctx, sessionID, user)
+		}
 	}
 
 	return trace.Wrap(err)
@@ -120,14 +100,15 @@ func (s *sessionTracker) GetSessionTracker(ctx context.Context, sessionID string
 
 // GetActiveSessionTrackers returns a list of active session trackers.
 func (s *sessionTracker) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
-	sessionList, err := s.getSessionList(ctx)
+	prefix := []byte(sessionPrefix)
+	result, err := s.bk.GetRange(ctx, prefix, backend.RangeEnd(prefix), backend.NoLimit)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	sessions := make([]types.SessionTracker, len(sessionList))
-	for i, sessionID := range sessionList {
-		session, err := s.loadSession(ctx, sessionID)
+	sessions := make([]types.SessionTracker, len(result.Items))
+	for i, item := range result.Items {
+		session, err := unmarshalSession(item.Value)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -169,13 +150,8 @@ func (s *sessionTracker) CreateSessionTracker(ctx context.Context, req *proto.Cr
 		return nil, trace.Wrap(err)
 	}
 
-	err = s.addSessionToList(ctx, session.GetSessionID())
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
 	item := backend.Item{Key: backend.Key(sessionPrefix, session.GetSessionID()), Value: json}
-	_, err = s.bk.Create(ctx, item)
+	_, err = s.bk.Put(ctx, item)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -217,8 +193,12 @@ func (s *sessionTracker) UpdateSessionTracker(ctx context.Context, req *proto.Up
 	item := backend.Item{Key: backend.Key(sessionPrefix, req.SessionID), Value: sessionJSON}
 	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
 	if trace.IsCompareFailed(err) {
-		time.Sleep(retryDelay)
-		return s.UpdateSessionTracker(ctx, req)
+		select {
+		case <-ctx.Done():
+			return trace.Wrap(ctx.Err())
+		case <-time.After(retryDelay):
+			return s.UpdateSessionTracker(ctx, req)
+		}
 	}
 
 	return trace.Wrap(err)
@@ -226,100 +206,7 @@ func (s *sessionTracker) UpdateSessionTracker(ctx context.Context, req *proto.Up
 
 // RemoveSessionTracker removes a tracker resource for an active session.
 func (s *sessionTracker) RemoveSessionTracker(ctx context.Context, sessionID string) error {
-	err := s.removeSessionFromList(ctx, sessionID)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
 	return trace.Wrap(s.bk.Delete(ctx, backend.Key(sessionPrefix, sessionID)))
-}
-
-func (s *sessionTracker) addSessionToList(ctx context.Context, sessionID string) error {
-	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	var list []string
-	err = utils.FastUnmarshal(listItem.Value, &list)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	list = append(list, sessionID)
-	listJSON, err := utils.FastMarshal(list)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	newListItem := backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: listJSON}
-	_, err = s.bk.CompareAndSwap(ctx, *listItem, newListItem)
-	return trace.Wrap(err)
-}
-
-func (s *sessionTracker) removeSessionFromList(ctx context.Context, sessionID string) error {
-	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	var list []string
-	err = utils.FastUnmarshal(listItem.Value, &list)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	found := false
-	for i, id := range list {
-		session, err := s.loadSession(ctx, id)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		doGC := session.GetCreated().Add(gcDelay).Before(time.Now().UTC()) && session.GetState() == types.SessionState_SessionStateTerminated
-		isStale := session.GetExpires().Before(time.Now().UTC())
-		if id == sessionID || doGC || isStale {
-			list = append(list[:i], list[i+1:]...)
-			found = true
-			break
-		}
-
-		if doGC {
-			err := s.RemoveSessionTracker(ctx, id)
-			if err != nil {
-				return trace.Wrap(err)
-			}
-		}
-	}
-
-	if !found {
-		return trace.NotFound("session %v not found in list", sessionID)
-	}
-
-	listJSON, err := utils.FastMarshal(list)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	newListItem := backend.Item{Key: backend.Key(sessionPrefix, sessionList), Value: listJSON}
-	_, err = s.bk.CompareAndSwap(ctx, *listItem, newListItem)
-	if trace.IsCompareFailed(err) {
-		time.Sleep(retryDelay)
-		return s.removeSessionFromList(ctx, sessionID)
-	}
-
-	return trace.Wrap(err)
-}
-
-func (s *sessionTracker) getSessionList(ctx context.Context) ([]string, error) {
-	listItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionList))
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	var list []string
-	err = utils.FastUnmarshal(listItem.Value, &list)
-	return list, trace.Wrap(err)
 }
 
 // unmarshalSession unmarshals the Session resource from JSON.
