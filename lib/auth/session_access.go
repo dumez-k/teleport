@@ -38,17 +38,14 @@ import (
 type SessionAccessEvaluator struct {
 	kind       types.SessionKind
 	policySets []*types.SessionTrackerPolicySet
-	requires   []*types.SessionRequirePolicy
 }
 
 // NewSessionAccessEvaluator creates a new session access evaluator for a given session kind
 // and a set of roles attached to the host user.
 func NewSessionAccessEvaluator(policySets []*types.SessionTrackerPolicySet, kind types.SessionKind) SessionAccessEvaluator {
-	requires := getRequirePolicies(policySets)
 	return SessionAccessEvaluator{
 		kind,
 		policySets,
-		requires,
 	}
 }
 
@@ -223,54 +220,64 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 	}
 
 	// If advanced access controls are supported or no require policies are defined, we allow by default.
-	if len(e.requires) == 0 || !supported {
+	if len(e.policySets) == 0 || !supported {
 		return true, PolicyOptions{TerminateOnLeave: true}, nil
 	}
 
-	// Check every require policy to see if it's fulfilled.
-	// Only one needs to be checked to allow the session.
-	for _, requirePolicy := range e.requires {
-		// Count of how many additional participant matches we need to fulfill the policy.
-		left := requirePolicy.Count
+	options := PolicyOptions{TerminateOnLeave: true}
 
-		// Check every participant against the policy.
-		for _, participant := range participants {
-			// Check the allow polices attached to the participant against the session.
-			allowPolicies := getAllowPolicies(participant)
-			for _, allowPolicy := range allowPolicies {
-				// Evaluate the filter in the require policy against the participant and allow policy.
-				matchesPredicate, err := e.matchesPredicate(&participant, requirePolicy, allowPolicy)
-				if err != nil {
-					return false, PolicyOptions{}, trace.Wrap(err)
+	// Check every policy set to check if it's fulfilled.
+	// We need every policy set to match to allow the session.
+policySetLoop:
+	for _, policySet := range e.policySets {
+		// Check every require policy to see if it's fulfilled.
+		// Only one needs to be checked to pass the policyset.
+		for _, requirePolicy := range policySet.RequireSessionJoin {
+			// Count of how many additional participant matches we need to fulfill the policy.
+			left := requirePolicy.Count
+
+			// Check every participant against the policy.
+			for _, participant := range participants {
+				// Check the allow polices attached to the participant against the session.
+				allowPolicies := getAllowPolicies(participant)
+				for _, allowPolicy := range allowPolicies {
+					// Evaluate the filter in the require policy against the participant and allow policy.
+					matchesPredicate, err := e.matchesPredicate(&participant, requirePolicy, allowPolicy)
+					if err != nil {
+						return false, PolicyOptions{}, trace.Wrap(err)
+					}
+
+					// If the the filter matches the participant and the allow policy matches the session
+					// we conclude that the participant matches against the require policy.
+					if matchesPredicate && e.matchesJoin(allowPolicy) {
+						left--
+						break
+					}
 				}
 
-				// If the the filter matches the participant and the allow policy matches the session
-				// we conclude that the participant matches against the require policy.
-				if matchesPredicate && e.matchesJoin(allowPolicy) {
-					left--
-					break
+				// If we've matched enough participants against the require policy, we can allow the session.
+				if left <= 0 {
+					switch requirePolicy.OnLeave {
+					case types.OnSessionLeaveTerminate:
+					case types.OnSessionLeavePause:
+						options.TerminateOnLeave = false
+					default:
+						return false, PolicyOptions{}, trace.BadParameter("unsupported on_leave policy: %v", requirePolicy.OnLeave)
+					}
+
+					// We matched at least one require policy within the set. Continue ahead.
+					continue policySetLoop
 				}
-			}
-
-			// If we've matched enough participants against the require policy, we can allow the session.
-			if left <= 0 {
-				options := PolicyOptions{}
-
-				switch requirePolicy.OnLeave {
-				case types.OnSessionLeaveTerminate:
-					options.TerminateOnLeave = true
-				case types.OnSessionLeavePause:
-					options.TerminateOnLeave = false
-				default:
-					return false, PolicyOptions{}, trace.BadParameter("unsupported on_leave policy: %v", requirePolicy.OnLeave)
-				}
-
-				return true, options, nil
 			}
 		}
+
+		// We failed to match against any require policy and thus the set.
+		// Thus, we can't allow the session.
+		return false, PolicyOptions{}, nil
 	}
 
-	return false, PolicyOptions{}, nil
+	// All policy sets matched, we can allow the session.
+	return true, options, nil
 }
 
 // supportsSessionAccessControls checks if moderated sessions-style access controls can be applied to the session.
