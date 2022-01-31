@@ -227,8 +227,10 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 		return true, PolicyOptions{TerminateOnLeave: true}, nil
 	}
 
+	options := PolicyOptions{TerminateOnLeave: true}
+
 	// Check every require policy to see if it's fulfilled.
-	// Only one needs to be checked to allow the session.
+policyLoop:
 	for _, requirePolicy := range e.requires {
 		// Count of how many additional participant matches we need to fulfill the policy.
 		left := requirePolicy.Count
@@ -254,23 +256,22 @@ func (e *SessionAccessEvaluator) FulfilledFor(participants []SessionAccessContex
 
 			// If we've matched enough participants against the require policy, we can allow the session.
 			if left <= 0 {
-				options := PolicyOptions{}
-
 				switch requirePolicy.OnLeave {
 				case types.OnSessionLeaveTerminate:
-					options.TerminateOnLeave = true
 				case types.OnSessionLeavePause:
 					options.TerminateOnLeave = false
 				default:
 					return false, PolicyOptions{}, trace.BadParameter("unsupported on_leave policy: %v", requirePolicy.OnLeave)
 				}
 
-				return true, options, nil
+				continue policyLoop
 			}
 		}
+
+		return false, PolicyOptions{}, nil
 	}
 
-	return false, PolicyOptions{}, nil
+	return true, options, nil
 }
 
 // supportsSessionAccessControls checks if moderated sessions-style access controls can be applied to the session.
