@@ -203,7 +203,7 @@ func (s *KubeSession) pipeInOut() {
 		handleNonPeerControls(s.stream.Mode, s.term, func() {
 			err := s.stream.ForceTerminate()
 			if err != nil {
-				fmt.Printf("\n\rerror while sending force termination request: %v\n\r", err.Error())
+				fmt.Printf("\n\rError while sending force termination request: %v\n\r", err.Error())
 			}
 		})
 	}()

@@ -630,7 +630,7 @@ func (ns *NodeSession) pipeInOut(shell io.ReadWriteCloser, mode types.SessionPar
 			handleNonPeerControls(mode, ns.terminal, func() {
 				_, err := sess.SendRequest(teleport.ForceTerminateRequest, true, nil)
 				if err != nil {
-					fmt.Printf("\n\rerror while sending force termination request: %v\n\r", err.Error())
+					fmt.Printf("\n\rError while sending force termination request: %v\n\r", err.Error())
 				}
 			})
 		}()
