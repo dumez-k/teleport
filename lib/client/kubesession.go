@@ -200,30 +200,12 @@ func (s *KubeSession) pipeInOut() {
 	go func() {
 		defer s.cancel()
 
-		for {
-			buf := make([]byte, 1)
-			_, err := s.term.Stdin().Read(buf)
-			if err == io.EOF {
-				break
+		handleNonPeerControls(s.stream.Mode, s.term, func() {
+			err := s.stream.ForceTerminate()
+			if err != nil {
+				fmt.Printf("\n\rerror while sending force termination request: %v\n\r", err.Error())
 			}
-
-			// Ctrl-C
-			if buf[0] == '\x03' {
-				fmt.Print("\n\rLeft session\n\r")
-				break
-			}
-
-			// Ctrl-T
-			if buf[0] == 't' {
-				fmt.Print("\n\rForcefully terminated session\n\r")
-				err := s.stream.ForceTerminate()
-				if err != nil {
-					fmt.Printf("\n\rerror while sending force termination request: %v\n\r", err.Error())
-				}
-
-				break
-			}
-		}
+		})
 	}()
 }
 

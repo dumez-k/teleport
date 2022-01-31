@@ -587,6 +587,29 @@ func (ns *NodeSession) watchSignals(shell io.Writer) {
 	}()
 }
 
+func handleNonPeerControls(mode types.SessionParticipantMode, term *terminal.Terminal, forceTerminate func()) {
+	for {
+		buf := make([]byte, 1)
+		_, err := term.Stdin().Read(buf)
+		if err == io.EOF {
+			return
+		}
+
+		// Ctrl-C
+		if buf[0] == '\x03' {
+			fmt.Print("\n\rLeft session\n\r")
+			return
+		}
+
+		// t
+		if buf[0] == 't' && mode == types.SessionModeratorMode {
+			fmt.Print("\n\rForcefully terminating session\n\r")
+			forceTerminate()
+			break
+		}
+	}
+}
+
 // pipeInOut launches two goroutines: one to pipe the local input into the remote shell,
 // and another to pipe the output of the remote shell into the local output
 func (ns *NodeSession) pipeInOut(shell io.ReadWriteCloser, mode types.SessionParticipantMode, sess *ssh.Session) {
@@ -604,29 +627,12 @@ func (ns *NodeSession) pipeInOut(shell io.ReadWriteCloser, mode types.SessionPar
 		go func() {
 			defer ns.closer.Close()
 
-			for {
-				buf := make([]byte, 1)
-				_, err := ns.terminal.Stdin().Read(buf)
-				if err == io.EOF {
-					return
+			handleNonPeerControls(mode, ns.terminal, func() {
+				_, err := sess.SendRequest(teleport.ForceTerminateRequest, true, nil)
+				if err != nil {
+					fmt.Printf("\n\rerror while sending force termination request: %v\n\r", err.Error())
 				}
-
-				// Ctrl-C
-				if buf[0] == '\x03' {
-					fmt.Print("\n\rLeft session\n\r")
-					return
-				}
-
-				// t
-				if buf[0] == 't' && mode == types.SessionModeratorMode {
-					_, err := sess.SendRequest(teleport.ForceTerminateRequest, true, nil)
-					if err != nil {
-						fmt.Printf("\n\rerror while sending force termination request: %v\n\r", err.Error())
-					}
-
-					return
-				}
-			}
+			})
 		}()
 	case types.SessionPeerMode:
 		// copy from the local input to the remote shell:
