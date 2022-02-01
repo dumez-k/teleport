@@ -67,7 +67,10 @@ func (s *sessionTracker) UpdatePresence(ctx context.Context, sessionID, user str
 		return trace.Wrap(err)
 	}
 
-	session.UpdatePresence(user)
+	err = session.UpdatePresence(user)
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
 	sessionJSON, err := marshalSession(session)
 	if err != nil {
