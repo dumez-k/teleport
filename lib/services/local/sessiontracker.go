@@ -100,7 +100,7 @@ func (s *sessionTracker) GetSessionTracker(ctx context.Context, sessionID string
 
 // GetActiveSessionTrackers returns a list of active session trackers.
 func (s *sessionTracker) GetActiveSessionTrackers(ctx context.Context) ([]types.SessionTracker, error) {
-	prefix := []byte(sessionPrefix)
+	prefix := backend.Key(sessionPrefix)
 	result, err := s.bk.GetRange(ctx, prefix, backend.RangeEnd(prefix), backend.NoLimit)
 	if err != nil {
 		return nil, trace.Wrap(err)
