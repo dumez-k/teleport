@@ -57,38 +57,40 @@ func (s *sessionTracker) loadSession(ctx context.Context, sessionID string) (typ
 
 // UpdatePresence updates the presence status of a user in a session.
 func (s *sessionTracker) UpdatePresence(ctx context.Context, sessionID, user string) error {
-	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionID))
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	session, err := unmarshalSession(sessionItem.Value)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	err = session.UpdatePresence(user)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	sessionJSON, err := marshalSession(session)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	item := backend.Item{Key: backend.Key(sessionPrefix, sessionID), Value: sessionJSON}
-	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
-	if trace.IsCompareFailed(err) {
-		select {
-		case <-ctx.Done():
-			return trace.Wrap(ctx.Err())
-		case <-time.After(retryDelay):
-			return s.UpdatePresence(ctx, sessionID, user)
+	for {
+		sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, sessionID))
+		if err != nil {
+			return trace.Wrap(err)
 		}
-	}
 
-	return trace.Wrap(err)
+		session, err := unmarshalSession(sessionItem.Value)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		err = session.UpdatePresence(user)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		sessionJSON, err := marshalSession(session)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		item := backend.Item{Key: backend.Key(sessionPrefix, sessionID), Value: sessionJSON}
+		_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
+		if trace.IsCompareFailed(err) {
+			select {
+			case <-ctx.Done():
+				return trace.Wrap(ctx.Err())
+			case <-time.After(retryDelay):
+				continue
+			}
+		}
+
+		return trace.Wrap(err)
+	}
 }
 
 // GetSessionTracker returns the current state of a session tracker for an active session.
@@ -164,47 +166,49 @@ func (s *sessionTracker) CreateSessionTracker(ctx context.Context, req *proto.Cr
 
 // UpdateSessionTracker updates a tracker resource for an active session.
 func (s *sessionTracker) UpdateSessionTracker(ctx context.Context, req *proto.UpdateSessionTrackerRequest) error {
-	sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, req.SessionID))
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	session, err := unmarshalSession(sessionItem.Value)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	switch session := session.(type) {
-	case *types.SessionTrackerV1:
-		switch update := req.Update.(type) {
-		case *proto.UpdateSessionTrackerRequest_UpdateState:
-			session.SetState(update.UpdateState.State)
-		case *proto.UpdateSessionTrackerRequest_AddParticipant:
-			session.AddParticipant(*update.AddParticipant.Participant)
-		case *proto.UpdateSessionTrackerRequest_RemoveParticipant:
-			session.RemoveParticipant(update.RemoveParticipant.ParticipantID)
+	for {
+		sessionItem, err := s.bk.Get(ctx, backend.Key(sessionPrefix, req.SessionID))
+		if err != nil {
+			return trace.Wrap(err)
 		}
-	default:
-		return trace.BadParameter("unrecognized session version %T", session)
-	}
 
-	sessionJSON, err := marshalSession(session)
-	if err != nil {
+		session, err := unmarshalSession(sessionItem.Value)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		switch session := session.(type) {
+		case *types.SessionTrackerV1:
+			switch update := req.Update.(type) {
+			case *proto.UpdateSessionTrackerRequest_UpdateState:
+				session.SetState(update.UpdateState.State)
+			case *proto.UpdateSessionTrackerRequest_AddParticipant:
+				session.AddParticipant(*update.AddParticipant.Participant)
+			case *proto.UpdateSessionTrackerRequest_RemoveParticipant:
+				session.RemoveParticipant(update.RemoveParticipant.ParticipantID)
+			}
+		default:
+			return trace.BadParameter("unrecognized session version %T", session)
+		}
+
+		sessionJSON, err := marshalSession(session)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		item := backend.Item{Key: backend.Key(sessionPrefix, req.SessionID), Value: sessionJSON}
+		_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
+		if trace.IsCompareFailed(err) {
+			select {
+			case <-ctx.Done():
+				return trace.Wrap(ctx.Err())
+			case <-time.After(retryDelay):
+				continue
+			}
+		}
+
 		return trace.Wrap(err)
 	}
-
-	item := backend.Item{Key: backend.Key(sessionPrefix, req.SessionID), Value: sessionJSON}
-	_, err = s.bk.CompareAndSwap(ctx, *sessionItem, item)
-	if trace.IsCompareFailed(err) {
-		select {
-		case <-ctx.Done():
-			return trace.Wrap(ctx.Err())
-		case <-time.After(retryDelay):
-			return s.UpdateSessionTracker(ctx, req)
-		}
-	}
-
-	return trace.Wrap(err)
 }
 
 // RemoveSessionTracker removes a tracker resource for an active session.
