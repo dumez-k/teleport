@@ -483,7 +483,7 @@ func (s *ServicesTestSuite) AppServerCRUD(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(out, check.HasLen, 1)
 	server.SetResourceID(out[0].GetResourceID())
-	fixtures.DeepCompare(c, out, []types.Server{server})
+	fixtures.DeepCompare(c, []types.Server{server}, out)
 
 	// Remove the application.
 	err = s.PresenceS.DeleteAppServer(ctx, server.Metadata.Namespace, server.GetName())

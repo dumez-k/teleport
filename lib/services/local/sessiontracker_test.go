@@ -21,18 +21,14 @@ import (
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
-	"github.com/gravitational/teleport/lib/backend/lite"
-	"github.com/jonboulle/clockwork"
+	"github.com/gravitational/teleport/lib/backend/memory"
 	"github.com/stretchr/testify/require"
 )
 
 // TestSessionTrackerStorage tests backend operations with tracker resources.
 func TestSessionTrackerStorage(t *testing.T) {
 	ctx := context.Background()
-	bk, err := lite.NewWithConfig(ctx, lite.Config{
-		Path:  t.TempDir(),
-		Clock: clockwork.NewFakeClock(),
-	})
+	bk, err := memory.New(memory.Config{})
 	require.NoError(t, err)
 
 	id := uuid.New().String()
