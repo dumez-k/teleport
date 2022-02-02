@@ -61,10 +61,10 @@ import (
 	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/net/http2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/httpstream"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/transport/spdy"
 )
@@ -639,7 +639,6 @@ func (f *Forwarder) getKubeGroupsAndUsers(
 	roles services.AccessChecker,
 	kubeClusterName string,
 	sessionTTL time.Duration) (groups, users []string, err error) {
-
 	kubeServices, err := f.cfg.CachingAuthClient.GetKubeServices(f.ctx)
 	if err != nil {
 		return nil, nil, trace.Wrap(err)
@@ -928,6 +927,11 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		return nil, trace.Wrap(err)
 	}
 
+	sess.forwarder, err = f.makeSessionForwarder(sess)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	if err := f.setupForwardingHeaders(sess, req); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -987,6 +991,11 @@ func (f *Forwarder) portForward(ctx *authContext, w http.ResponseWriter, req *ht
 		// This error goes to kubernetes client and is not visible in the logs
 		// of the teleport server if not logged here.
 		f.log.Errorf("Failed to create cluster session: %v.", err)
+		return nil, trace.Wrap(err)
+	}
+
+	sess.forwarder, err = f.makeSessionForwarder(sess)
+	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
@@ -1185,6 +1194,12 @@ func (f *Forwarder) catchAll(ctx *authContext, w http.ResponseWriter, req *http.
 		return nil, trace.Wrap(err)
 	}
 
+	sess.upgradeToHTTP2 = true
+	sess.forwarder, err = f.makeSessionForwarder(sess)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	if err := f.setupForwardingHeaders(sess, req); err != nil {
 		// This error goes to kubernetes client and is not visible in the logs
 		// of the teleport server if not logged here.
@@ -1289,6 +1304,10 @@ type clusterSession struct {
 	kubeClusterEndpoints []kubeClusterEndpoint
 	// kubeAddress is the address of this session's active connection (if there is one)
 	kubeAddress string
+	// upgradeToHTTP2 indicates whether the transport should be configured to use HTTP2.
+	// A HTTP2 configured transport does not work with connections that are going to be
+	// upgraded to SPDY, like in the cases of exec, port forward...
+	upgradeToHTTP2 bool
 }
 
 // kubeClusterEndpoint can be used to connect to a kube cluster
@@ -1386,7 +1405,7 @@ func (f *Forwarder) newClusterSessionRemoteCluster(ctx authContext) (*clusterSes
 	}
 
 	f.log.Debugf("Forwarding kubernetes session for %v to remote cluster.", ctx)
-	sess := &clusterSession{
+	return &clusterSession{
 		parent:      f,
 		authContext: ctx,
 		// Proxy uses reverse tunnel dialer to connect to Kubernetes in a leaf cluster
@@ -1395,24 +1414,7 @@ func (f *Forwarder) newClusterSessionRemoteCluster(ctx authContext) (*clusterSes
 		// `kube.teleport.cluster.local` value to indicate this is a Kubernetes proxy request
 		kubeClusterEndpoints: []kubeClusterEndpoint{{addr: reversetunnel.LocalKubernetes}},
 		tlsConfig:            tlsConfig,
-	}
-
-	transport, err := f.newTransport(sess.Dial, sess.tlsConfig)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	sess.forwarder, err = forward.New(
-		forward.FlushInterval(100*time.Millisecond),
-		forward.RoundTripper(transport),
-		forward.WebsocketDial(sess.Dial),
-		forward.Logger(f.log),
-		forward.ErrorHandler(fwdutils.ErrorHandlerFunc(f.formatForwardResponseError)),
-	)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return sess, nil
+	}, nil
 }
 
 func (f *Forwarder) newClusterSessionSameCluster(ctx authContext) (*clusterSession, error) {
@@ -1465,41 +1467,13 @@ func (f *Forwarder) newClusterSessionLocal(ctx authContext) (*clusterSession, er
 	f.log.Debugf("local Servername: %v", creds.tlsConfig.ServerName)
 
 	f.log.Debugf("Handling kubernetes session for %v using local credentials.", ctx)
-	sess := &clusterSession{
+	return &clusterSession{
 		parent:               f,
 		authContext:          ctx,
 		creds:                creds,
 		kubeClusterEndpoints: []kubeClusterEndpoint{{addr: creds.targetAddr}},
 		tlsConfig:            creds.tlsConfig,
-	}
-
-	t, err := f.newTransport(sess.Dial, sess.tlsConfig)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	// When running inside Kubernetes cluster or using auth/exec providers,
-	// kubeconfig provides a transport wrapper that adds a bearer token to
-	// requests
-	//
-	// When forwarding request to a remote cluster, this is not needed
-	// as the proxy uses client cert auth to reach out to remote proxy.
-	transport, err := creds.wrapTransport(t)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	sess.forwarder, err = forward.New(
-		forward.FlushInterval(100*time.Millisecond),
-		forward.RoundTripper(transport),
-		forward.WebsocketDial(sess.Dial),
-		forward.Logger(f.log),
-		forward.ErrorHandler(fwdutils.ErrorHandlerFunc(f.formatForwardResponseError)),
-	)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return sess, nil
+	}, nil
 }
 
 func (f *Forwarder) newClusterSessionDirect(ctx authContext, endpoints []kubeClusterEndpoint) (*clusterSession, error) {
@@ -1514,7 +1488,7 @@ func (f *Forwarder) newClusterSessionDirect(ctx authContext, endpoints []kubeClu
 	}
 
 	f.log.WithField("kube_service.endpoints", endpoints).Debugf("Kubernetes session for %v forwarded to remote kubernetes_service instance.", ctx)
-	sess := &clusterSession{
+	return &clusterSession{
 		parent:               f,
 		authContext:          ctx,
 		kubeClusterEndpoints: endpoints,
@@ -1522,16 +1496,36 @@ func (f *Forwarder) newClusterSessionDirect(ctx authContext, endpoints []kubeClu
 		// This session talks to a kubernetes_service, which should handle
 		// audit logging. Avoid duplicate logging.
 		noAuditEvents: true,
+	}, nil
+}
+
+// makeSessionForwader creates a new forward.Forwarder with a transport that
+// is either configured:
+// - for HTTP1 in case it's going to be used against streaming andoints like exec and port forward.
+// - for HTTP2 in all other cases.
+// The reason being is that streaming requests are going to be upgraded to SPDY, which is only
+// supported coming from an HTTP1 request.
+func (f *Forwarder) makeSessionForwarder(sess *clusterSession) (*forward.Forwarder, error) {
+	var err error
+	transport := f.newTransport(sess.Dial, sess.tlsConfig)
+
+	if sess.upgradeToHTTP2 {
+		transport = utilnet.SetTransportDefaults(transport)
+	} else {
+		sess.tlsConfig.NextProtos = nil
 	}
 
-	transport, err := f.newTransport(sess.Dial, sess.tlsConfig)
-	if err != nil {
-		return nil, trace.Wrap(err)
+	rt := http.RoundTripper(transport)
+	if sess.creds != nil {
+		rt, err = sess.creds.wrapTransport(rt)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
 	}
 
-	sess.forwarder, err = forward.New(
+	forwarder, err := forward.New(
 		forward.FlushInterval(100*time.Millisecond),
-		forward.RoundTripper(transport),
+		forward.RoundTripper(rt),
 		forward.WebsocketDial(sess.Dial),
 		forward.Logger(f.log),
 		forward.ErrorHandler(fwdutils.ErrorHandlerFunc(f.formatForwardResponseError)),
@@ -1539,14 +1533,15 @@ func (f *Forwarder) newClusterSessionDirect(ctx authContext, endpoints []kubeClu
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return sess, nil
+
+	return forwarder, nil
 }
 
 // DialFunc is a network dialer function that returns a network connection
 type DialFunc func(string, string) (net.Conn, error)
 
-func (f *Forwarder) newTransport(dial DialFunc, tlsConfig *tls.Config) (*http.Transport, error) {
-	t := &http.Transport{
+func (f *Forwarder) newTransport(dial DialFunc, tlsConfig *tls.Config) *http.Transport {
+	return &http.Transport{
 		Dial:            dial,
 		TLSClientConfig: tlsConfig,
 		// Increase the size of the connection pool. This substantially improves the
@@ -1557,16 +1552,8 @@ func (f *Forwarder) newTransport(dial DialFunc, tlsConfig *tls.Config) (*http.Tr
 		// IdleConnTimeout defines the maximum amount of time before idle connections
 		// are closed. Leaving this unset will lead to connections open forever and
 		// will cause memory leaks in a long running process.
-		IdleConnTimeout:   defaults.HTTPIdleTimeout,
-		ForceAttemptHTTP2: true,
+		IdleConnTimeout: defaults.HTTPIdleTimeout,
 	}
-
-	err := http2.ConfigureTransport(t)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return t, nil
 }
 
 // getOrCreateRequestContext creates a new certificate request for a given context,
