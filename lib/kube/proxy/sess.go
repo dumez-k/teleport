@@ -444,7 +444,8 @@ func (s *session) launch() error {
 	if s.PresenceEnabled {
 		go func() {
 			ticker := time.NewTicker(PresenceVerifyInterval)
-		outer:
+			defer ticker.Stop()
+
 			for {
 				select {
 				case <-ticker.C:
@@ -457,7 +458,7 @@ func (s *session) launch() error {
 						}
 					}
 				case <-s.closeC:
-					break outer
+					return
 				}
 			}
 		}()

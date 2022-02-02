@@ -863,7 +863,8 @@ func setupWithOptions(t *testing.T, opts appTestOptions) *pack {
 				WriteBufferSize: 1024,
 			}
 
-			conn, _ := upgrader.Upgrade(w, r, nil)
+			conn, err := upgrader.Upgrade(w, r, nil)
+			require.NoError(t, err)
 			handler(conn)
 		}
 	}
