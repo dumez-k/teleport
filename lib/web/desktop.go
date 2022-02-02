@@ -19,7 +19,6 @@ package web
 import (
 	"crypto/tls"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"strconv"
@@ -103,17 +102,29 @@ func createDesktopConnection(
 	//
 	// In the future, we may want to do something smarter like latency-based
 	// routing.
-	service := winServices[rand.Intn(len(winServices))]
-	log = log.WithField("windows-service-uuid", service.GetName())
-	log = log.WithField("windows-service-addr", service.GetAddr())
-	serviceCon, err := site.DialTCP(reversetunnel.DialParams{
-		From:     &utils.NetAddr{AddrNetwork: "tcp", Addr: r.RemoteAddr},
-		To:       &utils.NetAddr{AddrNetwork: "tcp", Addr: service.GetAddr()},
-		ConnType: types.WindowsDesktopTunnel,
-		ServerID: service.GetName() + "." + ctx.parent.clusterName,
-	})
+	winDesktops, err := ctx.unsafeCachedAuthClient.GetWindowsDesktopsByName(r.Context(), desktopName)
+
+	var serviceCon net.Conn
+	for _, service := range winDesktops {
+		log = log.WithField("windows-service-uuid", service.GetName())
+		log = log.WithField("windows-service-addr", service.GetAddr())
+		serviceCon, err = site.DialTCP(reversetunnel.DialParams{
+			From:     &utils.NetAddr{AddrNetwork: "tcp", Addr: r.RemoteAddr},
+			To:       &utils.NetAddr{AddrNetwork: "tcp", Addr: service.GetAddr()},
+			ConnType: types.WindowsDesktopTunnel,
+			ServerID: service.GetName() + "." + ctx.parent.clusterName,
+		})
+		if err != nil {
+			if trace.IsConnectionProblem(err) {
+				log.Errorf("Error connecting to service %q, trying another.", service.GetAddr())
+				continue
+			}
+			return trace.WrapWithMessage(err, "error connecting to windows_desktop_service at %q: %v", service.GetAddr(), err)
+		}
+		break
+	}
 	if err != nil {
-		return trace.WrapWithMessage(err, "failed to connect to windows_desktop_service at %q: %v", service.GetAddr(), err)
+		return trace.Errorf("Failed to connect to any windows_desktop_service: %v", err)
 	}
 	defer serviceCon.Close()
 	tlsConfig := ctx.clt.Config()

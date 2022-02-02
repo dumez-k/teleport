@@ -90,10 +90,14 @@ func (h *Handler) getDesktopHandle(w http.ResponseWriter, r *http.Request, p htt
 
 	desktopName := p.ByName("desktopName")
 
-	windowsDesktop, err := clt.GetWindowsDesktop(r.Context(), desktopName)
+	windowsDesktops, err := clt.GetWindowsDesktopsByName(r.Context(), desktopName)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+	windowsDesktops = types.DeduplicateDesktops(windowsDesktops)
+	if len(windowsDesktops) != 1 {
+		return nil, trace.Errorf("Expected one desktop, got %d", len(windowsDesktops))
+	}
 
-	return ui.MakeDesktop(windowsDesktop), nil
+	return ui.MakeDesktop(windowsDesktops[0]), nil
 }

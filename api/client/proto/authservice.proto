@@ -1160,16 +1160,27 @@ message GetWindowsDesktopsResponse {
     repeated types.WindowsDesktopV3 Desktops = 1 [ (gogoproto.jsontag) = "desktops" ];
 }
 
+// GetWindowsDesktopsByNameRequest is a request for a collection of
+// Windows desktops by name host.
+message GetWindowsDesktopsByNameRequest {
+    // Name is the name of the Windows desktop host.
+    string Name = 1 [ (gogoproto.jsontag) = "name" ];
+}
+
 // GetWindowsDesktopRequest is a request for a single Windows desktop host.
 message GetWindowsDesktopRequest {
     // Name is the name of the Windows desktop host.
     string Name = 1 [ (gogoproto.jsontag) = "name" ];
+    // HostID is the ID of the Windows desktop service.
+    string HostID = 2 [ (gogoproto.jsontag) = "HostID" ];
 }
 
 // DeleteWindowsDesktopRequest is a request to delete a Windows desktop host.
 message DeleteWindowsDesktopRequest {
     // Name is the name of the Windows desktop host.
     string Name = 1 [ (gogoproto.jsontag) = "name" ];
+    // HostID is the ID of the Windows desktop service.
+    string HostID = 2 [ (gogoproto.jsontag) = "HostID" ];
 }
 
 // WindowsDesktopCertRequest is a request to generate a client certificate used
@@ -1794,6 +1805,9 @@ service AuthService {
 
     // GetWindowsDesktops returns all registered Windows desktop hosts.
     rpc GetWindowsDesktops(google.protobuf.Empty) returns (GetWindowsDesktopsResponse);
+    // GetWindowsDesktopsByName returns all registered Windows desktop hosts matching name.
+    rpc GetWindowsDesktopsByName(GetWindowsDesktopsByNameRequest)
+        returns (GetWindowsDesktopsResponse);
     // GetWindowsDesktop returns a registered Windows desktop host.
     rpc GetWindowsDesktop(GetWindowsDesktopRequest) returns (types.WindowsDesktopV3);
     // CreateWindowsDesktop registers a new Windows desktop host.

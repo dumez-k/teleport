@@ -3743,12 +3743,27 @@ func (a *ServerWithRoles) GetWindowsDesktops(ctx context.Context) ([]types.Windo
 	return filtered, nil
 }
 
+func (a *ServerWithRoles) GetWindowsDesktopsByName(ctx context.Context, name string) ([]types.WindowsDesktop, error) {
+	if err := a.action(apidefaults.Namespace, types.KindWindowsDesktop, types.VerbList, types.VerbRead); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	hosts, err := a.authServer.GetWindowsDesktopsByName(ctx, name)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	filtered, err := a.filterWindowsDesktops(hosts)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return filtered, nil
+}
+
 // GetWindowsDesktop returns a registered windows desktop host.
-func (a *ServerWithRoles) GetWindowsDesktop(ctx context.Context, name string) (types.WindowsDesktop, error) {
+func (a *ServerWithRoles) GetWindowsDesktop(ctx context.Context, hostID, name string) (types.WindowsDesktop, error) {
 	if err := a.action(apidefaults.Namespace, types.KindWindowsDesktop, types.VerbRead); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	host, err := a.authServer.GetWindowsDesktop(ctx, name)
+	host, err := a.authServer.GetWindowsDesktop(ctx, hostID, name)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -3774,7 +3789,7 @@ func (a *ServerWithRoles) UpdateWindowsDesktop(ctx context.Context, s types.Wind
 		return trace.Wrap(err)
 	}
 
-	existing, err := a.authServer.GetWindowsDesktop(ctx, s.GetName())
+	existing, err := a.authServer.GetWindowsDesktop(ctx, s.GetHostID(), s.GetName())
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -3796,7 +3811,7 @@ func (a *ServerWithRoles) UpsertWindowsDesktop(ctx context.Context, s types.Wind
 
 	// If the desktop exists, check access,
 	// if it doesn't, continue.
-	existing, err := a.authServer.GetWindowsDesktop(ctx, s.GetName())
+	existing, err := a.authServer.GetWindowsDesktop(ctx, s.GetHostID(), s.GetName())
 	if err == nil {
 		if err := a.checkAccessToWindowsDesktop(existing); err != nil {
 			return trace.Wrap(err)
@@ -3812,18 +3827,18 @@ func (a *ServerWithRoles) UpsertWindowsDesktop(ctx context.Context, s types.Wind
 }
 
 // DeleteWindowsDesktop removes the specified windows desktop host.
-func (a *ServerWithRoles) DeleteWindowsDesktop(ctx context.Context, name string) error {
+func (a *ServerWithRoles) DeleteWindowsDesktop(ctx context.Context, hostID, name string) error {
 	if err := a.action(apidefaults.Namespace, types.KindWindowsDesktop, types.VerbDelete); err != nil {
 		return trace.Wrap(err)
 	}
-	desktop, err := a.authServer.GetWindowsDesktop(ctx, name)
+	desktop, err := a.authServer.GetWindowsDesktop(ctx, hostID, name)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	if err := a.checkAccessToWindowsDesktop(desktop); err != nil {
 		return trace.Wrap(err)
 	}
-	return a.authServer.DeleteWindowsDesktop(ctx, name)
+	return a.authServer.DeleteWindowsDesktop(ctx, hostID, name)
 }
 
 // DeleteAllWindowsDesktops removes all registered windows desktop hosts.
@@ -3838,7 +3853,7 @@ func (a *ServerWithRoles) DeleteAllWindowsDesktops(ctx context.Context) error {
 	}
 	for _, desktop := range desktops {
 		if err := a.checkAccessToWindowsDesktop(desktop); err == nil {
-			if err := a.authServer.DeleteWindowsDesktop(ctx, desktop.GetName()); err != nil {
+			if err := a.authServer.DeleteWindowsDesktop(ctx, desktop.GetHostID(), desktop.GetName()); err != nil {
 				return trace.Wrap(err)
 			}
 		}
