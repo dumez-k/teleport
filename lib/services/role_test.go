@@ -3560,9 +3560,9 @@ func TestExtractConditionForIdentifier(t *testing.T) {
 }
 
 func TestCheckKubeGroupsAndUsers(t *testing.T) {
-	roleA := &types.RoleV4{
+	roleA := &types.RoleV5{
 		Metadata: types.Metadata{Name: "roleA", Namespace: apidefaults.Namespace},
-		Spec: types.RoleSpecV4{
+		Spec: types.RoleSpecV5{
 			Allow: types.RoleConditions{
 				KubeGroups: []string{"system:masters"},
 				KubeUsers:  []string{"dev-user"},
@@ -3572,9 +3572,9 @@ func TestCheckKubeGroupsAndUsers(t *testing.T) {
 			},
 		},
 	}
-	roleB := &types.RoleV4{
+	roleB := &types.RoleV5{
 		Metadata: types.Metadata{Name: "roleB", Namespace: apidefaults.Namespace},
-		Spec: types.RoleSpecV4{
+		Spec: types.RoleSpecV5{
 			Allow: types.RoleConditions{
 				KubeGroups: []string{"limited"},
 				KubeUsers:  []string{"limited-user"},
@@ -3584,9 +3584,9 @@ func TestCheckKubeGroupsAndUsers(t *testing.T) {
 			},
 		},
 	}
-	roleC := &types.RoleV4{
+	roleC := &types.RoleV5{
 		Metadata: types.Metadata{Name: "roleC", Namespace: apidefaults.Namespace},
-		Spec: types.RoleSpecV4{
+		Spec: types.RoleSpecV5{
 			Allow: types.RoleConditions{
 				KubeGroups: []string{"system:masters", "groupB"},
 				KubeUsers:  []string{"user"},
@@ -3607,9 +3607,9 @@ func TestCheckKubeGroupsAndUsers(t *testing.T) {
 		{
 			name: "empty kube labels should returns all kube users/groups",
 			roles: RoleSet{
-				&types.RoleV4{
+				&types.RoleV5{
 					Metadata: types.Metadata{Name: "role-dev", Namespace: apidefaults.Namespace},
-					Spec: types.RoleSpecV4{
+					Spec: types.RoleSpecV5{
 						Allow: types.RoleConditions{
 							KubeUsers:  []string{"dev-user"},
 							KubeGroups: []string{"system:masters"},
@@ -3619,9 +3619,9 @@ func TestCheckKubeGroupsAndUsers(t *testing.T) {
 						},
 					},
 				},
-				&types.RoleV4{
+				&types.RoleV5{
 					Metadata: types.Metadata{Name: "role-prod", Namespace: apidefaults.Namespace},
-					Spec: types.RoleSpecV4{
+					Spec: types.RoleSpecV5{
 						Allow: types.RoleConditions{
 							KubeUsers:  []string{"limited-user"},
 							KubeGroups: []string{"limited"},
@@ -3675,9 +3675,9 @@ func TestCheckKubeGroupsAndUsers(t *testing.T) {
 			name: "deny system:masters prod kube group",
 			roles: RoleSet{
 				roleC,
-				&types.RoleV4{
+				&types.RoleV5{
 					Metadata: types.Metadata{Name: "roleD", Namespace: apidefaults.Namespace},
-					Spec: types.RoleSpecV4{
+					Spec: types.RoleSpecV5{
 						Deny: types.RoleConditions{
 							KubeGroups: []string{"system:masters"},
 							KubernetesLabels: map[string]apiutils.Strings{
@@ -3700,9 +3700,9 @@ func TestCheckKubeGroupsAndUsers(t *testing.T) {
 				"release": "test",
 			},
 			roles: RoleSet{
-				&types.RoleV4{
+				&types.RoleV5{
 					Metadata: types.Metadata{Name: "roleA", Namespace: apidefaults.Namespace},
-					Spec: types.RoleSpecV4{
+					Spec: types.RoleSpecV5{
 						Allow: types.RoleConditions{
 							KubeGroups: []string{"system:masters", "groupA"},
 							KubeUsers:  []string{"dev-user"},
@@ -3713,9 +3713,9 @@ func TestCheckKubeGroupsAndUsers(t *testing.T) {
 						},
 					},
 				},
-				&types.RoleV4{
+				&types.RoleV5{
 					Metadata: types.Metadata{Name: "deny", Namespace: apidefaults.Namespace},
-					Spec: types.RoleSpecV4{
+					Spec: types.RoleSpecV5{
 						Deny: types.RoleConditions{
 							KubeGroups: []string{"system:masters"},
 							KubernetesLabels: map[string]apiutils.Strings{

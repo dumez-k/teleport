@@ -903,20 +903,6 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		}
 	}()
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-	sess, err := f.newClusterSession(*ctx)
-	if err != nil {
-		// This error goes to kubernetes client and is not visible in the logs
-		// of the teleport server if not logged here.
-		f.log.Errorf("Failed to create cluster session: %v.", err)
-		return nil, trace.Wrap(err)
-	}
-	sessionStart := f.cfg.Clock.Now().UTC()
-
-=======
->>>>>>> 5ea918098 (hook up streams from kube exec endpoint)
 	q := req.URL.Query()
 	request := remoteCommandRequest{
 		podNamespace:       p.ByName("podNamespace"),
@@ -933,284 +919,12 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		pingPeriod:         f.cfg.ConnPingPeriod,
 		onResize:           func(remotecommand.TerminalSize) {},
 	}
-<<<<<<< HEAD
-	eventPodMeta := request.eventPodMeta(request.context, sess.creds)
-
-	var recorder events.SessionRecorder
-	var emitter apievents.Emitter
-	sessionID := tsession.NewID()
-	if sess.noAuditEvents {
-		// All events should be recorded by kubernetes_service and not proxy_service
-		emitter = events.NewDiscardEmitter()
-		request.onResize = func(resize remotecommand.TerminalSize) {}
-	} else if request.tty {
-		streamer, err := f.newStreamer(ctx)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		// create session recorder
-		// get the audit log from the server and create a session recorder. this will
-		// be a discard audit log if the proxy is in recording mode and a teleport
-		// node so we don't create double recordings.
-		recorder, err = events.NewAuditWriter(events.AuditWriterConfig{
-			// Audit stream is using server context, not session context,
-			// to make sure that session is uploaded even after it is closed
-			Context:      f.ctx,
-			Streamer:     streamer,
-			Clock:        f.cfg.Clock,
-			SessionID:    sessionID,
-			ServerID:     f.cfg.ServerID,
-			Namespace:    f.cfg.Namespace,
-			RecordOutput: ctx.recordingConfig.GetMode() != types.RecordOff,
-			Component:    teleport.Component(teleport.ComponentSession, teleport.ComponentProxyKube),
-			ClusterName:  f.cfg.ClusterName,
-		})
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		emitter = recorder
-		defer recorder.Close(f.ctx)
-		request.onResize = func(resize remotecommand.TerminalSize) {
-			params := tsession.TerminalParams{
-				W: int(resize.Width),
-				H: int(resize.Height),
-			}
-			// Build the resize event.
-			resizeEvent := &apievents.Resize{
-				Metadata: apievents.Metadata{
-					Type:        events.ResizeEvent,
-					Code:        events.TerminalResizeCode,
-					ClusterName: f.cfg.ClusterName,
-				},
-				ConnectionMetadata: apievents.ConnectionMetadata{
-					RemoteAddr: req.RemoteAddr,
-					Protocol:   events.EventProtocolKube,
-				},
-				ServerMetadata: apievents.ServerMetadata{
-					ServerNamespace: f.cfg.Namespace,
-				},
-				SessionMetadata: apievents.SessionMetadata{
-					SessionID: string(sessionID),
-					WithMFA:   ctx.Identity.GetIdentity().MFAVerified,
-				},
-				UserMetadata:              ctx.eventUserMeta(),
-				TerminalSize:              params.Serialize(),
-				KubernetesClusterMetadata: ctx.eventClusterMeta(),
-				KubernetesPodMetadata:     eventPodMeta,
-			}
-
-			// Report the updated window size to the event log (this is so the sessions
-			// can be replayed correctly).
-			if err := recorder.EmitAuditEvent(f.ctx, resizeEvent); err != nil {
-				f.log.WithError(err).Warn("Failed to emit terminal resize event.")
-			}
-		}
-	} else {
-		emitter = f.cfg.StreamEmitter
-	}
-
-	if request.tty {
-		// Emit "new session created" event. There are no initial terminal
-		// parameters per k8s protocol, so set up with any default
-		termParams := tsession.TerminalParams{
-			W: 100,
-			H: 100,
-		}
-		sessionStartEvent := &apievents.SessionStart{
-			Metadata: apievents.Metadata{
-				Type:        events.SessionStartEvent,
-				Code:        events.SessionStartCode,
-				ClusterName: f.cfg.ClusterName,
-				ID:          uuid.New().String(),
-			},
-			ServerMetadata: apievents.ServerMetadata{
-				ServerID:        f.cfg.ServerID,
-				ServerNamespace: f.cfg.Namespace,
-				ServerHostname:  sess.teleportCluster.name,
-				ServerAddr:      sess.kubeAddress,
-			},
-			SessionMetadata: apievents.SessionMetadata{
-				SessionID: string(sessionID),
-				WithMFA:   ctx.Identity.GetIdentity().MFAVerified,
-			},
-			UserMetadata: ctx.eventUserMeta(),
-			ConnectionMetadata: apievents.ConnectionMetadata{
-				RemoteAddr: req.RemoteAddr,
-				LocalAddr:  sess.kubeAddress,
-				Protocol:   events.EventProtocolKube,
-			},
-			TerminalSize:              termParams.Serialize(),
-			KubernetesClusterMetadata: ctx.eventClusterMeta(),
-			KubernetesPodMetadata:     eventPodMeta,
-			InitialCommand:            request.cmd,
-			SessionRecording:          ctx.recordingConfig.GetMode(),
-		}
-		if err := emitter.EmitAuditEvent(f.ctx, sessionStartEvent); err != nil {
-			f.log.WithError(err).Warn("Failed to emit event.")
-		}
-	}
-
-	if err := f.setupForwardingHeaders(sess, req); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	proxy, err := createRemoteCommandProxy(request)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	defer proxy.Close()
-
-	executor, err := f.getExecutor(*ctx, sess, req)
-	if err != nil {
-		f.log.WithError(err).Warning("Failed creating executor.")
-		return nil, trace.Wrap(err)
-	}
-	streamOptions := proxy.options()
-
-	// Wrap stdin/out/err with data trackers, but keep them as nil if they were
-	// nil. Otherwise, executor will try to use these tracking read/writers
-	// when the underlying stream is nil.
-	trackIn := utils.NewTrackingReader(streamOptions.Stdin)
-	if streamOptions.Stdin != nil {
-		streamOptions.Stdin = trackIn
-	}
-	trackOut := utils.NewTrackingWriter(streamOptions.Stdout)
-	if streamOptions.Stdout != nil {
-		streamOptions.Stdout = trackOut
-	}
-	trackErr := utils.NewTrackingWriter(streamOptions.Stderr)
-	if streamOptions.Stderr != nil {
-		streamOptions.Stderr = trackErr
-	}
-	if recorder != nil {
-		// capture stderr and stdout writes to session recorder
-		streamOptions.Stdout = io.MultiWriter(streamOptions.Stdout, recorder)
-		streamOptions.Stderr = io.MultiWriter(streamOptions.Stderr, recorder)
-	}
-
-	// Defer a cleanup handler that will mark the stream as complete on exit, regardless of
-	// whether it exits successfully, or with an error.
-	// NOTE that this cleanup handler MAY MODIFY the returned error value.
-	defer func() {
-		if err := proxy.sendStatus(err); err != nil {
-			f.log.WithError(err).Warning("Failed to send status. Exec command was aborted by client.")
-		}
-
-		if request.tty {
-			sessionDataEvent := &apievents.SessionData{
-				Metadata: apievents.Metadata{
-					Type:        events.SessionDataEvent,
-					Code:        events.SessionDataCode,
-					ClusterName: f.cfg.ClusterName,
-				},
-				ServerMetadata: apievents.ServerMetadata{
-					ServerID:        f.cfg.ServerID,
-					ServerNamespace: f.cfg.Namespace,
-				},
-				SessionMetadata: apievents.SessionMetadata{
-					SessionID: string(sessionID),
-					WithMFA:   ctx.Identity.GetIdentity().MFAVerified,
-				},
-				UserMetadata: ctx.eventUserMeta(),
-				ConnectionMetadata: apievents.ConnectionMetadata{
-					RemoteAddr: req.RemoteAddr,
-					LocalAddr:  sess.kubeAddress,
-					Protocol:   events.EventProtocolKube,
-				},
-				// Bytes transmitted from user to pod.
-				BytesTransmitted: trackIn.Count(),
-				// Bytes received from pod by user.
-				BytesReceived: trackOut.Count() + trackErr.Count(),
-			}
-			if err := emitter.EmitAuditEvent(f.ctx, sessionDataEvent); err != nil {
-				f.log.WithError(err).Warn("Failed to emit session data event.")
-			}
-			sessionEndEvent := &apievents.SessionEnd{
-				Metadata: apievents.Metadata{
-					Type:        events.SessionEndEvent,
-					Code:        events.SessionEndCode,
-					ClusterName: f.cfg.ClusterName,
-				},
-				ServerMetadata: apievents.ServerMetadata{
-					ServerID:        f.cfg.ServerID,
-					ServerNamespace: f.cfg.Namespace,
-				},
-				SessionMetadata: apievents.SessionMetadata{
-					SessionID: string(sessionID),
-					WithMFA:   ctx.Identity.GetIdentity().MFAVerified,
-				},
-				UserMetadata: ctx.eventUserMeta(),
-				ConnectionMetadata: apievents.ConnectionMetadata{
-					RemoteAddr: req.RemoteAddr,
-					LocalAddr:  sess.kubeAddress,
-					Protocol:   events.EventProtocolKube,
-				},
-				Interactive:               true,
-				Participants:              []string{ctx.User.GetName()},
-				StartTime:                 sessionStart,
-				EndTime:                   f.cfg.Clock.Now().UTC(),
-				KubernetesClusterMetadata: ctx.eventClusterMeta(),
-				KubernetesPodMetadata:     eventPodMeta,
-				InitialCommand:            request.cmd,
-				SessionRecording:          ctx.recordingConfig.GetMode(),
-			}
-			if err := emitter.EmitAuditEvent(f.ctx, sessionEndEvent); err != nil {
-				f.log.WithError(err).Warn("Failed to emit session end event.")
-			}
-		} else {
-			// send an exec event
-			execEvent := &apievents.Exec{
-				Metadata: apievents.Metadata{
-					Type:        events.ExecEvent,
-					ClusterName: f.cfg.ClusterName,
-				},
-				ServerMetadata: apievents.ServerMetadata{
-					ServerID:        f.cfg.ServerID,
-					ServerNamespace: f.cfg.Namespace,
-				},
-				SessionMetadata: apievents.SessionMetadata{
-					SessionID: string(sessionID),
-					WithMFA:   ctx.Identity.GetIdentity().MFAVerified,
-				},
-				UserMetadata: ctx.eventUserMeta(),
-				ConnectionMetadata: apievents.ConnectionMetadata{
-					RemoteAddr: req.RemoteAddr,
-					LocalAddr:  sess.kubeAddress,
-					Protocol:   events.EventProtocolKube,
-				},
-				CommandMetadata: apievents.CommandMetadata{
-					Command: strings.Join(request.cmd, " "),
-				},
-				KubernetesClusterMetadata: ctx.eventClusterMeta(),
-				KubernetesPodMetadata:     eventPodMeta,
-			}
-			if err != nil {
-				execEvent.Code = events.ExecFailureCode
-				execEvent.Error = err.Error()
-				if exitErr, ok := err.(utilexec.ExitError); ok && exitErr.Exited() {
-					execEvent.ExitCode = fmt.Sprintf("%d", exitErr.ExitStatus())
-				}
-			} else {
-				execEvent.Code = events.ExecCode
-			}
-			if err := emitter.EmitAuditEvent(f.ctx, execEvent); err != nil {
-				f.log.WithError(err).Warn("Failed to emit event.")
-			}
-		}
-	}()
-
-	if err = executor.Stream(streamOptions); err != nil {
-		f.log.WithError(err).Warning("Executor failed while streaming.")
-		return nil, trace.Wrap(err)
-	}
-
-=======
->>>>>>> 493e88ca8 (rip out existing impl of the exec handler and track sessions in forwarder)
-=======
-=======
 
 	sess, err := f.newClusterSession(*ctx)
 	if err != nil {
+		// This error goes to kubernetes client and is not visible in the logs
+		// of the teleport server if not logged here.
+		f.log.Errorf("Failed to create cluster session: %v.", err)
 		return nil, trace.Wrap(err)
 	}
 
@@ -1219,10 +933,6 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 	}
 
 	proxy, err := createRemoteCommandProxy(request)
-<<<<<<< HEAD
->>>>>>> 5ea918098 (hook up streams from kube exec endpoint)
-	session := newSession(*ctx, f, req, p)
-=======
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -1239,31 +949,14 @@ func (f *Forwarder) exec(ctx *authContext, w http.ResponseWriter, req *http.Requ
 		return nil, trace.Wrap(err)
 	}
 
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> e0cfb9a5c (get initiator roles)
-	client := newKubeProxyClientStreams(proxy)
-	party := newParty(*ctx, client)
-
-=======
->>>>>>> d3b0315cc (track sessions)
-=======
 	f.sessions[session.id] = session
->>>>>>> 10660dc65 (various fixes)
 	err = session.join(party)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-<<<<<<< HEAD
->>>>>>> 42e3d5b0f (wire exec into current session)
-=======
 	<-party.closeC
-<<<<<<< HEAD
->>>>>>> b9323c697 (block endpoints on party close)
-=======
 	delete(f.sessions, session.id)
->>>>>>> 10660dc65 (various fixes)
 	return nil, nil
 }
 
