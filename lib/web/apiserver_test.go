@@ -2855,11 +2855,12 @@ func (s *WebSuite) makeTerminal(pack *authPack, opts ...session.ID) (*websocket.
 	}
 
 	dialer.Jar.SetCookies(&u, pack.cookies)
-	ws, _, err := dialer.Dial(u.String(), nil)
+	ws, resp, err := dialer.Dial(u.String(), nil)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
+	resp.Body.Close()
 	return ws, nil
 }
 
@@ -3475,9 +3476,12 @@ func (r *proxy) makeTerminal(t *testing.T, pack *authPack, sessionID session.ID)
 	}
 
 	dialer.Jar.SetCookies(&u, pack.cookies)
-	ws, _, err := dialer.Dial(u.String(), nil)
+	ws, resp, err := dialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { ws.Close() })
+	t.Cleanup(func() {
+		ws.Close()
+		resp.Body.Close()
+	})
 	return ws
 }
 

@@ -51,13 +51,6 @@ import (
 const PresenceVerifyInterval = time.Second * 15
 const PresenceMaxDifference = time.Minute
 
-const (
-	// number of the most recent session writes (what's been written
-	// in a terminal) to be instanly replayed to the newly joining
-	// parties
-	instantReplayLen = 20
-)
-
 var serverSessions = prometheus.NewGauge(
 	prometheus.GaugeOpts{
 		Name: teleport.MetricServerInteractiveSessions,

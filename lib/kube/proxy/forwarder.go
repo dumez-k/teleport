@@ -819,11 +819,12 @@ func (f *Forwarder) remoteJoin(ctx *authContext, w http.ResponseWriter, req *htt
 	}
 	url = url + req.URL.Path
 
-	wsTarget, _, err := dialer.Dial(url, nil)
+	wsTarget, respTarget, err := dialer.Dial(url, nil)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	defer wsTarget.Close()
+	defer respTarget.Body.Close()
 
 	wsSource, err := f.upgrader.Upgrade(w, req, nil)
 	if err != nil {

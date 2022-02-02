@@ -49,20 +49,6 @@ func NewSessionAccessEvaluator(policySets []*types.SessionTrackerPolicySet, kind
 	}
 }
 
-func getRequirePolicies(policySets []*types.SessionTrackerPolicySet) []*types.SessionRequirePolicy {
-	var policies []*types.SessionRequirePolicy
-
-	for _, policySet := range policySets {
-		if len(policySet.RequireSessionJoin) == 0 {
-			continue
-		}
-
-		policies = append(policies, policySet.RequireSessionJoin...)
-	}
-
-	return policies
-}
-
 func getAllowPolicies(participant SessionAccessContext) []*types.SessionJoinPolicy {
 	var policies []*types.SessionJoinPolicy
 

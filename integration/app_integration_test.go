@@ -1364,11 +1364,12 @@ func (p *pack) makeWebsocketRequest(sessionCookie, endpoint string) (string, err
 	dialer.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
-	conn, _, err := dialer.Dial(fmt.Sprintf("wss://%s%s", net.JoinHostPort(Loopback, p.rootCluster.GetPortWeb()), endpoint), header)
+	conn, resp, err := dialer.Dial(fmt.Sprintf("wss://%s%s", net.JoinHostPort(Loopback, p.rootCluster.GetPortWeb()), endpoint), header)
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
 	defer conn.Close()
+	defer resp.Body.Close()
 	stream := &utils.WebSocketIO{Conn: conn}
 	data, err := io.ReadAll(stream)
 	if err != nil {

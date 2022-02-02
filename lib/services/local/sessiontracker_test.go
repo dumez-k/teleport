@@ -54,13 +54,13 @@ func TestSessionTrackerStorage(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	bobId := uuid.New().String()
+	bobID := uuid.New().String()
 	err = srv.UpdateSessionTracker(ctx, &proto.UpdateSessionTrackerRequest{
 		SessionID: id,
 		Update: &proto.UpdateSessionTrackerRequest_AddParticipant{
 			AddParticipant: &proto.SessionTrackerAddParticipant{
 				Participant: &types.Participant{
-					ID:   bobId,
+					ID:   bobID,
 					User: "bob",
 					Mode: string(types.SessionObserverMode),
 				},
@@ -73,7 +73,7 @@ func TestSessionTrackerStorage(t *testing.T) {
 		SessionID: id,
 		Update: &proto.UpdateSessionTrackerRequest_RemoveParticipant{
 			RemoveParticipant: &proto.SessionTrackerRemoveParticipant{
-				ParticipantID: bobId,
+				ParticipantID: bobID,
 			},
 		},
 	})
