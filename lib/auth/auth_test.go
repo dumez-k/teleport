@@ -336,7 +336,7 @@ func (s *AuthSuite) TestAuthenticateSSHUser(c *C) {
 
 	// Register a kubernetes cluster to verify the defaulting logic in TLS cert
 	// generation.
-	err = s.a.UpsertKubeService(ctx, &types.ServerV2{
+	_, err = s.a.UpsertKubeServiceV2(ctx, &types.ServerV2{
 		Metadata: types.Metadata{Name: "kube-service"},
 		Kind:     types.KindKubeService,
 		Version:  types.V2,

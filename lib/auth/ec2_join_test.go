@@ -643,7 +643,7 @@ func TestHostUniqueCheck(t *testing.T) {
 						Namespace: defaults.Namespace,
 					},
 				}
-				err := a.UpsertKubeService(context.Background(), kube)
+				_, err := a.UpsertKubeServiceV2(context.Background(), kube)
 				require.NoError(t, err)
 			},
 		},
