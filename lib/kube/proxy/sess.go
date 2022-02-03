@@ -466,6 +466,7 @@ func (s *session) launch() error {
 
 	s.log.Debugf("Launching session: %v", s.id)
 	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.io.BroadcastMessage("Launching session...")
 	q := s.req.URL.Query()
@@ -781,7 +782,6 @@ func (s *session) launch() error {
 		TerminalSizeQueue: s.terminalSizeQueue,
 	}
 
-	s.mu.Unlock()
 	if err = executor.Stream(options); err != nil {
 		s.log.WithError(err).Warning("Executor failed while streaming.")
 		return trace.Wrap(err)
