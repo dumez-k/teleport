@@ -33,6 +33,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/profile"
 	"github.com/gravitational/teleport/api/types"
@@ -46,6 +47,7 @@ import (
 	"github.com/gravitational/teleport/lib/utils"
 
 	apidefaults "github.com/gravitational/teleport/api/defaults"
+	"github.com/gravitational/teleport/lib/kube/proxy/streamproto"
 	kubeutils "github.com/gravitational/teleport/lib/kube/utils"
 
 	"github.com/gravitational/trace"
@@ -1240,6 +1242,30 @@ type kubeProxyConfig struct {
 	targetAddress       utils.NetAddr
 }
 
+func kubeProxyTlsConfig(cfg kubeProxyConfig) (*tls.Config, error) {
+	tlsConfig := &tls.Config{}
+	_, kubeConfig, err := kubeProxyClient(cfg)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	caCert, err := tlsca.ParseCertificatePEM(kubeConfig.TLSClientConfig.CAData)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	cert, err := tls.X509KeyPair(kubeConfig.TLSClientConfig.CertData, kubeConfig.TLSClientConfig.KeyData)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	tlsConfig.RootCAs = &x509.CertPool{}
+	tlsConfig.RootCAs.AddCert(caCert)
+	tlsConfig.Certificates = []tls.Certificate{cert}
+	tlsConfig.ServerName = kubeConfig.TLSClientConfig.ServerName
+	return tlsConfig, nil
+}
+
 // kubeProxyClient returns kubernetes client using local teleport proxy
 func kubeProxyClient(cfg kubeProxyConfig) (*kubernetes.Clientset, *rest.Config, error) {
 	authServer := cfg.t.Process.GetAuthServer()
@@ -1459,6 +1485,31 @@ func kubeExec(kubeConfig *rest.Config, args kubeExecArgs) error {
 	return executor.Stream(opts)
 }
 
+func kubeJoin(kubeConfig kubeProxyConfig, sessionID string) (*streamproto.SessionStream, error) {
+	tlsConfig, err := kubeProxyTlsConfig(kubeConfig)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	dialer := &websocket.Dialer{
+		TLSClientConfig: tlsConfig,
+	}
+
+	endpoint := "wss://" + kubeConfig.t.Config.Proxy.Kube.ListenAddr.Addr + "/api/v1/teleport/join/" + sessionID
+	ws, resp, err := dialer.Dial(endpoint, nil)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	defer resp.Body.Close()
+
+	stream, err := streamproto.NewSessionStream(ws, streamproto.ClientHandshake{Mode: types.SessionObserverMode})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return stream, nil
+}
+
 // testKubeJoin tests that that joining an interactive exec session works.
 func testKubeJoin(t *testing.T, suite *KubeSuite) {
 	tconf := suite.teleKubeConfig(Host)
@@ -1472,18 +1523,20 @@ func testKubeJoin(t *testing.T, suite *KubeSuite) {
 		log:         suite.log,
 	})
 
-	username := suite.me.Username
+	hostUsername := suite.me.Username
+	participantUsername := suite.me.Username + "-participant"
 	kubeGroups := []string{testImpersonationGroup}
 	kubeUsers := []string{"alice@example.com"}
 	role, err := types.NewRole("kubemaster", types.RoleSpecV5{
 		Allow: types.RoleConditions{
-			Logins:     []string{username},
+			Logins:     []string{hostUsername},
 			KubeGroups: kubeGroups,
 			KubeUsers:  kubeUsers,
 		},
 	})
 	require.NoError(t, err)
-	teleport.AddUserWithRole(username, role)
+	teleport.AddUserWithRole(hostUsername, role)
+	teleport.AddUserWithRole(participantUsername, role)
 
 	err = teleport.CreateEx(t, nil, tconf)
 	require.NoError(t, err)
@@ -1497,7 +1550,7 @@ func testKubeJoin(t *testing.T, suite *KubeSuite) {
 	// set up kube configuration using proxy
 	proxyClient, proxyClientConfig, err := kubeProxyClient(kubeProxyConfig{
 		t:          teleport,
-		username:   username,
+		username:   hostUsername,
 		kubeUsers:  kubeUsers,
 		kubeGroups: kubeGroups,
 	})
@@ -1507,58 +1560,46 @@ func testKubeJoin(t *testing.T, suite *KubeSuite) {
 	pod, err := proxyClient.CoreV1().Pods(testNamespace).Get(ctx, testPod, metav1.GetOptions{})
 	require.NoError(t, err)
 
-	out := &bytes.Buffer{}
-	err = kubeExec(proxyClientConfig, kubeExecArgs{
-		podName:      pod.Name,
-		podNamespace: pod.Namespace,
-		container:    pod.Spec.Containers[0].Name,
-		command:      []string{"/bin/cat", "/var/run/secrets/kubernetes.io/serviceaccount/namespace"},
-		stdout:       out,
-	})
-	require.NoError(t, err)
-
-	data := out.Bytes()
-	require.Equal(t, testNamespace, string(data))
-
 	// interactive command, allocate pty
 	term := NewTerminal(250)
+
+	out := &bytes.Buffer{}
+
+	go func() {
+		err = kubeExec(proxyClientConfig, kubeExecArgs{
+			podName:      pod.Name,
+			podNamespace: pod.Namespace,
+			container:    pod.Spec.Containers[0].Name,
+			command:      []string{"/bin/sh"},
+			stdout:       out,
+			tty:          true,
+			stdin:        term,
+		})
+
+		require.NoError(t, err)
+	}()
+
+	time.Sleep(time.Second)
+	stream, err := kubeJoin(kubeProxyConfig{
+		t:          teleport,
+		username:   participantUsername,
+		kubeUsers:  kubeUsers,
+		kubeGroups: kubeGroups,
+	}, "")
+	require.NoError(t, err)
+	defer stream.Close()
+	time.Sleep(time.Second)
+
 	// lets type "echo hi" followed by "enter" and then "exit" + "enter":
-	term.Type("\aecho hi\n\r\aexit\n\r\a")
+	term.Type("\aecho hi\n\r")
 
-	out = &bytes.Buffer{}
-	err = kubeExec(proxyClientConfig, kubeExecArgs{
-		podName:      pod.Name,
-		podNamespace: pod.Namespace,
-		container:    pod.Spec.Containers[0].Name,
-		command:      []string{"/bin/sh"},
-		stdout:       out,
-		tty:          true,
-		stdin:        term,
-	})
+	go func() {
+		time.Sleep(time.Second)
+		term.Type("\aexit\n\r\a")
+	}()
+
+	participantOutput, err := io.ReadAll(stream)
+	outputString := string(participantOutput)
 	require.NoError(t, err)
-
-	// verify the session stream output
-	sessionStream := out.String()
-	require.Contains(t, sessionStream, "echo hi")
-	require.Contains(t, sessionStream, "exit")
-
-	// verify traffic capture and upload, wait for the upload to hit
-	var sessionID string
-	timeoutC := time.After(10 * time.Second)
-loop:
-	for {
-		select {
-		case event := <-teleport.UploadEventsC:
-			sessionID = event.SessionID
-			break loop
-		case <-timeoutC:
-			t.Fatalf("Timeout waiting for upload of session to complete")
-		}
-	}
-
-	// read back the entire session and verify that it matches the stated output
-	capturedStream, err := teleport.Process.GetAuthServer().GetSessionChunk(apidefaults.Namespace, session.ID(sessionID), 0, events.MaxChunkBytes)
-	require.NoError(t, err)
-
-	require.Equal(t, sessionStream, string(capturedStream))
+	require.Contains(t, outputString, "echo hi")
 }
