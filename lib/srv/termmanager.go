@@ -105,8 +105,8 @@ func (g *TermManager) Read(p []byte) (int, error) {
 	c := make(chan bool)
 	go func() {
 		g.readStateUpdate.L.Lock()
+		defer g.readStateUpdate.L.Unlock()
 
-	outer:
 		for {
 			g.mu.Lock()
 			on := g.on
@@ -116,13 +116,11 @@ func (g *TermManager) Read(p []byte) (int, error) {
 			case c <- on:
 			case <-q:
 				close(c)
-				break outer
+				return
 			}
 
 			g.readStateUpdate.Wait()
 		}
-
-		g.readStateUpdate.L.Unlock()
 	}()
 
 	on := <-c
