@@ -161,6 +161,7 @@ func TestKube(t *testing.T) {
 	t.Run("TrustedClustersClientCert", suite.bind(testKubeTrustedClustersClientCert))
 	t.Run("TrustedClustersSNI", suite.bind(testKubeTrustedClustersSNI))
 	t.Run("Disconnect", suite.bind(testKubeDisconnect))
+	t.Run("Join", suite.bind(testKubeJoin))
 }
 
 // TestKubeExec tests kubernetes Exec command set
@@ -1456,4 +1457,108 @@ func kubeExec(kubeConfig *rest.Config, args kubeExecArgs) error {
 		Tty:    args.tty,
 	}
 	return executor.Stream(opts)
+}
+
+// testKubeJoin tests that that joining an interactive exec session works.
+func testKubeJoin(t *testing.T, suite *KubeSuite) {
+	tconf := suite.teleKubeConfig(Host)
+
+	teleport := NewInstance(InstanceConfig{
+		ClusterName: Site,
+		HostID:      HostID,
+		NodeName:    Host,
+		Priv:        suite.priv,
+		Pub:         suite.pub,
+		log:         suite.log,
+	})
+
+	username := suite.me.Username
+	kubeGroups := []string{testImpersonationGroup}
+	kubeUsers := []string{"alice@example.com"}
+	role, err := types.NewRole("kubemaster", types.RoleSpecV5{
+		Allow: types.RoleConditions{
+			Logins:     []string{username},
+			KubeGroups: kubeGroups,
+			KubeUsers:  kubeUsers,
+		},
+	})
+	require.NoError(t, err)
+	teleport.AddUserWithRole(username, role)
+
+	err = teleport.CreateEx(t, nil, tconf)
+	require.NoError(t, err)
+
+	err = teleport.Start()
+	require.NoError(t, err)
+	defer teleport.StopAll()
+
+	ctx := context.Background()
+
+	// set up kube configuration using proxy
+	proxyClient, proxyClientConfig, err := kubeProxyClient(kubeProxyConfig{
+		t:          teleport,
+		username:   username,
+		kubeUsers:  kubeUsers,
+		kubeGroups: kubeGroups,
+	})
+	require.NoError(t, err)
+
+	// try get request to fetch available pods
+	pod, err := proxyClient.CoreV1().Pods(testNamespace).Get(ctx, testPod, metav1.GetOptions{})
+	require.NoError(t, err)
+
+	out := &bytes.Buffer{}
+	err = kubeExec(proxyClientConfig, kubeExecArgs{
+		podName:      pod.Name,
+		podNamespace: pod.Namespace,
+		container:    pod.Spec.Containers[0].Name,
+		command:      []string{"/bin/cat", "/var/run/secrets/kubernetes.io/serviceaccount/namespace"},
+		stdout:       out,
+	})
+	require.NoError(t, err)
+
+	data := out.Bytes()
+	require.Equal(t, testNamespace, string(data))
+
+	// interactive command, allocate pty
+	term := NewTerminal(250)
+	// lets type "echo hi" followed by "enter" and then "exit" + "enter":
+	term.Type("\aecho hi\n\r\aexit\n\r\a")
+
+	out = &bytes.Buffer{}
+	err = kubeExec(proxyClientConfig, kubeExecArgs{
+		podName:      pod.Name,
+		podNamespace: pod.Namespace,
+		container:    pod.Spec.Containers[0].Name,
+		command:      []string{"/bin/sh"},
+		stdout:       out,
+		tty:          true,
+		stdin:        term,
+	})
+	require.NoError(t, err)
+
+	// verify the session stream output
+	sessionStream := out.String()
+	require.Contains(t, sessionStream, "echo hi")
+	require.Contains(t, sessionStream, "exit")
+
+	// verify traffic capture and upload, wait for the upload to hit
+	var sessionID string
+	timeoutC := time.After(10 * time.Second)
+loop:
+	for {
+		select {
+		case event := <-teleport.UploadEventsC:
+			sessionID = event.SessionID
+			break loop
+		case <-timeoutC:
+			t.Fatalf("Timeout waiting for upload of session to complete")
+		}
+	}
+
+	// read back the entire session and verify that it matches the stated output
+	capturedStream, err := teleport.Process.GetAuthServer().GetSessionChunk(apidefaults.Namespace, session.ID(sessionID), 0, events.MaxChunkBytes)
+	require.NoError(t, err)
+
+	require.Equal(t, sessionStream, string(capturedStream))
 }
