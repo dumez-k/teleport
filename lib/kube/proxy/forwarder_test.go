@@ -451,16 +451,13 @@ func TestAuthenticate(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			f.cfg.ReverseTunnelSrv = tt.tunnel
 			ap.kubeServices = tt.kubeServices
-			role, err := types.NewRole("ops", types.RoleSpecV5{
+			roles, err := services.FromSpec("ops", types.RoleSpecV5{
 				Allow: types.RoleConditions{
 					KubeUsers:  tt.roleKubeUsers,
 					KubeGroups: tt.roleKubeGroups,
 				},
 			})
-
 			require.NoError(t, err)
-			role.SetKubernetesLabels(types.Allow, types.Labels{types.Wildcard: []string{types.Wildcard}})
-			roles := services.NewRoleSet(role)
 			authCtx := auth.Context{
 				User:    user,
 				Checker: roles,
