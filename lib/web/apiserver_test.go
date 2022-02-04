@@ -2854,8 +2854,12 @@ func (s *WebSuite) makeTerminal(pack *authPack, opts ...session.ID) (*websocket.
 		InsecureSkipVerify: true,
 	}
 
-	dialer.Jar.SetCookies(&u, pack.cookies)
-	ws, resp, err := dialer.Dial(u.String(), nil)
+	header := http.Header{}
+	for _, cookie := range pack.cookies {
+		header.Add("Cookie", cookie.String())
+	}
+
+	ws, resp, err := dialer.Dial(u.String(), header)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -3475,8 +3479,12 @@ func (r *proxy) makeTerminal(t *testing.T, pack *authPack, sessionID session.ID)
 		InsecureSkipVerify: true,
 	}
 
-	dialer.Jar.SetCookies(&u, pack.cookies)
-	ws, resp, err := dialer.Dial(u.String(), nil)
+	header := http.Header{}
+	for _, cookie := range pack.cookies {
+		header.Add("Cookie", cookie.String())
+	}
+
+	ws, resp, err := dialer.Dial(u.String(), header)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		ws.Close()

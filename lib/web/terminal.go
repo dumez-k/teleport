@@ -647,13 +647,16 @@ func (t *TerminalHandler) read(out []byte, ws *websocket.Conn) (n int, err error
 		return n, nil
 	}
 
-	var bytes []byte
-	err = ws.WriteMessage(websocket.BinaryMessage, bytes)
+	ty, bytes, err := ws.ReadMessage()
 	if err != nil {
 		if err == io.EOF {
 			return 0, io.EOF
 		}
 		return 0, trace.Wrap(err)
+	}
+
+	if ty != websocket.BinaryMessage {
+		return 0, trace.BadParameter("expected binary message, got %v", ty)
 	}
 
 	var envelope Envelope
