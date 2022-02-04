@@ -153,7 +153,7 @@ type Role interface {
 // NewRole constructs new standard role
 func NewRole(name string, spec RoleSpecV5) (Role, error) {
 	role := RoleV5{
-		Version: V5,
+		Version: V3,
 		Metadata: Metadata{
 			Name: name,
 		},
