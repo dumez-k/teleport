@@ -139,6 +139,14 @@ type CommandLineFlags struct {
 	DatabaseGCPProjectID string
 	// DatabaseGCPInstanceID is GCP Cloud SQL instance identifier.
 	DatabaseGCPInstanceID string
+	// DatabaseADKeytabFile is the path to Kerberos keytab file.
+	DatabaseADKeytabFile string
+	// DatabaseADKrb5File is the path to krb5.conf file.
+	DatabaseADKrb5File string
+	// DatabaseADRealm is the Kerberos realm for authentication.
+	DatabaseADRealm string
+	// DatabaseADSPN is the database Service Principal Name.
+	DatabaseADSPN string
 }
 
 // ReadConfigFile reads /etc/teleport.yaml (or whatever is passed via --config flag)
@@ -1667,6 +1675,12 @@ func Configure(clf *CommandLineFlags, cfg *service.Config) error {
 			GCP: service.DatabaseGCP{
 				ProjectID:  clf.DatabaseGCPProjectID,
 				InstanceID: clf.DatabaseGCPInstanceID,
+			},
+			AD: service.DatabaseAD{
+				KeytabFile: clf.DatabaseADKeytabFile,
+				Krb5File:   clf.DatabaseADKrb5File,
+				Realm:      clf.DatabaseADRealm,
+				SPN:        clf.DatabaseADSPN,
 			},
 		}
 		if err := db.CheckAndSetDefaults(); err != nil {
