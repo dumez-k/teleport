@@ -52,3 +52,7 @@ func (ws *WebSocketIO) Read(p []byte) (int, error) {
 	ws.remaining = ws.remaining[copied:]
 	return copied, nil
 }
+
+func (ws *WebSocketIO) Close() error {
+	return trace.Wrap(ws.Conn.Close())
+}

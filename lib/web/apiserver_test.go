@@ -1135,7 +1135,6 @@ func TestTerminalRequireSessionMfa(t *testing.T) {
 			ws := proxy.makeTerminal(t, pack, session.NewID())
 
 			// Wait for websocket authn challenge event.
-			var raw []byte
 			ty, raw, err := ws.ReadMessage()
 			require.Nil(t, err)
 			require.Equal(t, websocket.BinaryMessage, ty)
@@ -2855,6 +2854,7 @@ func (s *WebSuite) makeTerminal(pack *authPack, opts ...session.ID) (*websocket.
 	}
 
 	header := http.Header{}
+	header.Add("Origin", "http://localhost")
 	for _, cookie := range pack.cookies {
 		header.Add("Cookie", cookie.String())
 	}
@@ -2897,9 +2897,14 @@ func (s *WebSuite) waitForRawEvent(ws *websocket.Conn, timeout time.Duration) er
 
 	go func() {
 		for {
-			_, raw, err := ws.ReadMessage()
+			ty, raw, err := ws.ReadMessage()
 			if err != nil {
 				done <- trace.Wrap(err)
+				return
+			}
+
+			if ty != websocket.BinaryMessage {
+				done <- trace.BadParameter("expected binary message, got %v", ty)
 				return
 			}
 
@@ -2935,9 +2940,14 @@ func (s *WebSuite) waitForResizeEvent(ws *websocket.Conn, timeout time.Duration)
 
 	go func() {
 		for {
-			_, raw, err := ws.ReadMessage()
+			ty, raw, err := ws.ReadMessage()
 			if err != nil {
 				done <- trace.Wrap(err)
+				return
+			}
+
+			if ty != websocket.BinaryMessage {
+				done <- trace.BadParameter("expected binary message, got %v", ty)
 				return
 			}
 
@@ -3480,6 +3490,7 @@ func (r *proxy) makeTerminal(t *testing.T, pack *authPack, sessionID session.ID)
 	}
 
 	header := http.Header{}
+	header.Add("Origin", "http://localhost")
 	for _, cookie := range pack.cookies {
 		header.Add("Cookie", cookie.String())
 	}
