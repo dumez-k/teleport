@@ -34,11 +34,13 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/term"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/constants"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
+	apiutils "github.com/gravitational/teleport/api/utils"
 	apisshutils "github.com/gravitational/teleport/api/utils/sshutils"
 	"github.com/gravitational/teleport/lib/asciitable"
 	"github.com/gravitational/teleport/lib/auth"
@@ -54,6 +56,7 @@ import (
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/sshutils"
 	"github.com/gravitational/teleport/lib/sshutils/scp"
+	"github.com/gravitational/teleport/lib/sshutils/x11"
 	"github.com/gravitational/teleport/lib/tlsca"
 	"github.com/gravitational/teleport/lib/utils"
 
@@ -209,6 +212,15 @@ type CLIConf struct {
 	// will block instead. Useful when port forwarding. Equivalent of -N for OpenSSH.
 	NoRemoteExec bool
 
+	// X11ForwardingUntrusted will set up untrusted X11 forwarding for the session ('ssh -X')
+	X11ForwardingUntrusted bool
+
+	// X11Forwarding will set up trusted X11 forwarding for the session ('ssh -Y')
+	X11ForwardingTrusted bool
+
+	// X11ForwardingTimeout can optionally set to set a timeout for untrusted X11 forwarding.
+	X11ForwardingTimeout time.Duration
+
 	// Debug sends debug logs to stdout.
 	Debug bool
 
@@ -239,6 +251,9 @@ type CLIConf struct {
 	// unsetEnvironment unsets Teleport related environment variables.
 	unsetEnvironment bool
 
+	// overrideStdout allows to switch standard output source for resource command. Used in tests.
+	overrideStdout io.Writer
+
 	// mockSSOLogin used in tests to override sso login handler in teleport client.
 	mockSSOLogin client.SSOLoginFunc
 
@@ -255,6 +270,14 @@ type CLIConf struct {
 	AWSRole string
 	// AWSCommandArgs contains arguments that will be forwarded to AWS CLI binary.
 	AWSCommandArgs []string
+}
+
+// Stdout returns the stdout writer.
+func (c *CLIConf) Stdout() io.Writer {
+	if c.overrideStdout != nil {
+		return c.overrideStdout
+	}
+	return os.Stdout
 }
 
 func main() {
@@ -302,6 +325,8 @@ const (
 	// establishment of a TCP connection, rather than the full HTTP round-
 	// trip that we measure against, so some tweaking may be needed.
 	proxyDefaultResolutionTimeout = 2 * time.Second
+
+	teleportNamespace = "teleport.dev"
 )
 
 // cliOption is used in tests to inject/override configuration within Run
@@ -369,6 +394,9 @@ func Run(args []string, opts ...cliOption) error {
 	ssh.Flag("cluster", clusterHelp).StringVar(&cf.SiteName)
 	ssh.Flag("option", "OpenSSH options in the format used in the configuration file").Short('o').AllowDuplicate().StringsVar(&cf.Options)
 	ssh.Flag("no-remote-exec", "Don't execute remote command, useful for port forwarding").Short('N').BoolVar(&cf.NoRemoteExec)
+	ssh.Flag("x11-untrusted", "Requests untrusted (secure) X11 forwarding for this session").Short('X').BoolVar(&cf.X11ForwardingUntrusted)
+	ssh.Flag("x11-trusted", "Requests trusted (insecure) X11 forwarding for this session. This can make your local displays vulnerable to attacks, use with caution").Short('Y').BoolVar(&cf.X11ForwardingTrusted)
+	ssh.Flag("x11-untrusted-timeout", "Sets a timeout for untrusted X11 forwarding, after which the client will reject any forwarding requests from the server").Default("10m").DurationVar((&cf.X11ForwardingTimeout))
 
 	// AWS.
 	aws := app.Command("aws", "Access AWS API.")
@@ -401,9 +429,9 @@ func Run(args []string, opts ...cliOption) error {
 
 	// Databases.
 	db := app.Command("db", "View and control proxied databases.")
+	db.Flag("cluster", clusterHelp).StringVar(&cf.SiteName)
 	dbList := db.Command("ls", "List all available databases.")
 	dbList.Flag("verbose", "Show extra database fields.").Short('v').BoolVar(&cf.Verbose)
-	dbList.Flag("cluster", clusterHelp).StringVar(&cf.SiteName)
 	dbLogin := db.Command("login", "Retrieve credentials for a database.")
 	dbLogin.Arg("db", "Database to retrieve credentials for. Can be obtained from 'tsh db ls' output.").Required().StringVar(&cf.DatabaseService)
 	dbLogin.Flag("db-user", "Optional database user to configure as default.").StringVar(&cf.DatabaseUser)
@@ -702,7 +730,7 @@ func onPlay(cf *CLIConf) error {
 			if err != nil {
 				return trace.ConvertSystemError(err)
 			}
-			if err := client.PlayFile(context.TODO(), tarFile, sid); err != nil {
+			if err := client.PlayFile(cf.Context, tarFile, sid); err != nil {
 				return trace.Wrap(err)
 			}
 		default:
@@ -710,14 +738,36 @@ func onPlay(cf *CLIConf) error {
 			if err != nil {
 				return trace.Wrap(err)
 			}
-			if err := tc.Play(context.TODO(), cf.Namespace, cf.SessionID); err != nil {
+			if err := tc.Play(cf.Context, cf.Namespace, cf.SessionID); err != nil {
 				return trace.Wrap(err)
 			}
 		}
 	default:
-		err := exportFile(cf.SessionID, cf.Format)
-		if err != nil {
-			return trace.Wrap(err)
+		switch {
+		case path.Ext(cf.SessionID) == ".tar":
+			err := exportFile(cf.SessionID, cf.Format)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+		default:
+			tc, err := makeClient(cf, true)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+			events, err := tc.GetSessionEvents(context.TODO(), cf.Namespace, cf.SessionID)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+			for _, event := range events {
+				// when playing from a file, id is not included, this
+				// makes the outputs otherwise identical
+				delete(event, "id")
+				e, err := utils.FastMarshal(event)
+				if err != nil {
+					return trace.Wrap(err)
+				}
+				fmt.Println(string(e))
+			}
 		}
 	}
 	return nil
@@ -977,7 +1027,12 @@ func setupNoninteractiveClient(tc *client.TeleportClient, key *client.Key) error
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	tc.TLS, err = key.TeleportClientTLSConfig(nil)
+
+	rootCluster, err := key.RootClusterName()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	tc.TLS, err = key.TeleportClientTLSConfig(nil, []string{rootCluster})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1225,13 +1280,36 @@ func executeAccessRequest(cf *CLIConf, tc *client.TeleportClient) error {
 		req.SetSuggestedReviewers(reviewers)
 	}
 
-	// Watch for resolution events on the given request. Start watcher before
-	// creating the request to avoid a potential race.
+	// Watch for resolution events on the given request. Start watcher and wait
+	// for it to be ready before creating the request to avoid a potential race.
 	errChan := make(chan error)
 	if !cf.NoWait {
+		log.Debug("Waiting for the access-request watcher to ready up...")
+		ready := make(chan struct{})
 		go func() {
-			errChan <- waitForRequestResolution(cf, tc, req)
+			var resolvedReq types.AccessRequest
+			err := tc.WithRootClusterClient(cf.Context, func(clt auth.ClientI) error {
+				var err error
+				resolvedReq, err = waitForRequestResolution(cf, clt, req, ready)
+				return trace.Wrap(err)
+			})
+
+			if err != nil {
+				errChan <- trace.Wrap(err)
+			} else {
+				errChan <- trace.Wrap(onRequestResolution(cf, tc, resolvedReq))
+			}
 		}()
+
+		select {
+		case err = <-errChan:
+			if err == nil {
+				return trace.Errorf("event watcher exited cleanly without readying up?")
+			}
+			return trace.Wrap(err)
+		case <-ready:
+			log.Debug("Access-request watcher is ready")
+		}
 	}
 
 	// Create request if it doesn't already exist
@@ -1304,20 +1382,36 @@ func printNodesAsText(nodes []types.Server, verbose bool) {
 	// In normal mode chunk the labels and print two per line and allow multiple
 	// lines per node.
 	case false:
-		t = asciitable.MakeTable([]string{"Node Name", "Address", "Labels"})
+		var rows [][]string
 		for _, n := range nodes {
-			labelChunks := chunkLabels(n.GetAllLabels(), 2)
-			for i, v := range labelChunks {
-				if i == 0 {
-					t.AddRow([]string{n.GetHostname(), getAddr(n), strings.Join(v, ", ")})
-				} else {
-					t.AddRow([]string{"", "", strings.Join(v, ", ")})
-				}
-			}
+			rows = append(rows,
+				[]string{n.GetHostname(), getAddr(n), sortedLabels(n.GetAllLabels())})
 		}
+		t = makeTableWithTruncatedColumn([]string{"Node Name", "Address", "Labels"}, rows, "Labels")
 	}
-
 	fmt.Println(t.AsBuffer().String())
+}
+
+func sortedLabels(labels map[string]string) string {
+	var teleportNamespaced []string
+	var namespaced []string
+	var result []string
+	for key, val := range labels {
+		if strings.HasPrefix(key, teleportNamespace+"/") {
+			teleportNamespaced = append(teleportNamespaced, key)
+			continue
+		}
+		if strings.Contains(key, "/") {
+			namespaced = append(namespaced, fmt.Sprintf("%s=%s", key, val))
+			continue
+		}
+		result = append(result, fmt.Sprintf("%s=%s", key, val))
+	}
+	sort.Strings(result)
+	sort.Strings(namespaced)
+	sort.Strings(teleportNamespaced)
+	namespaced = append(namespaced, teleportNamespaced...)
+	return strings.Join(append(result, namespaced...), ",")
 }
 
 func showApps(apps []types.Application, active []tlsca.RouteToApp, verbose bool) {
@@ -1338,39 +1432,79 @@ func showApps(apps []types.Application, active []tlsca.RouteToApp, verbose bool)
 				app.GetDescription(),
 				app.GetPublicAddr(),
 				app.GetURI(),
-				app.LabelsString(),
+				sortedLabels(app.GetAllLabels()),
 			})
 		}
 		fmt.Println(t.AsBuffer().String())
 	} else {
-		t := asciitable.MakeTable([]string{"Application", "Description", "Public Address", "Labels"})
+		var rows [][]string
 		for _, app := range apps {
-			labelChunks := chunkLabels(app.GetAllLabels(), 2)
-			for i, v := range labelChunks {
-				var name string
-				var addr string
-				if i == 0 {
-					name = app.GetName()
-					addr = app.GetPublicAddr()
+			name := app.GetName()
+			for _, a := range active {
+				if name == a.Name {
+					name = fmt.Sprintf("> %v", name)
 				}
-				for _, a := range active {
-					if name == a.Name {
-						name = fmt.Sprintf("> %v", name)
-					}
-				}
-				t.AddRow([]string{
-					name,
-					app.GetDescription(),
-					addr,
-					strings.Join(v, ", "),
-				})
 			}
+			desc := app.GetDescription()
+			addr := app.GetPublicAddr()
+			labels := sortedLabels(app.GetAllLabels())
+			rows = append(rows, []string{name, desc, addr, labels})
 		}
+		t := makeTableWithTruncatedColumn(
+			[]string{"Application", "Description", "Public Address", "Labels"}, rows, "Labels")
 		fmt.Println(t.AsBuffer().String())
 	}
 }
 
-func showDatabases(cluster string, databases []types.Database, active []tlsca.RouteToDatabase, verbose bool) {
+func makeTableWithTruncatedColumn(columnOrder []string, rows [][]string, truncatedColumn string) asciitable.Table {
+	width, _, err := term.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		width = 80
+	}
+	truncatedColMinSize := 16
+	maxColWidth := (width - truncatedColMinSize) / (len(columnOrder) - 1)
+	t := asciitable.MakeTable([]string{})
+	totalLen := 0
+	columns := []asciitable.Column{}
+
+	for collIndex, colName := range columnOrder {
+		column := asciitable.Column{
+			Title:         colName,
+			MaxCellLength: len(colName),
+		}
+		if colName == truncatedColumn { // truncated column is handled separately in next loop
+			columns = append(columns, column)
+			continue
+		}
+		for _, row := range rows {
+			cellLen := row[collIndex]
+			if len(cellLen) > column.MaxCellLength {
+				column.MaxCellLength = len(cellLen)
+			}
+		}
+		if column.MaxCellLength > maxColWidth {
+			column.MaxCellLength = maxColWidth
+			totalLen += column.MaxCellLength + 4 // "...<space>"
+		} else {
+			totalLen += column.MaxCellLength + 1 // +1 for column separator
+		}
+		columns = append(columns, column)
+	}
+
+	for _, column := range columns {
+		if column.Title == truncatedColumn {
+			column.MaxCellLength = width - totalLen - len("... ")
+		}
+		t.AddColumn(column)
+	}
+
+	for _, row := range rows {
+		t.AddRow(row)
+	}
+	return t
+}
+
+func showDatabases(clusterFlag string, databases []types.Database, active []tlsca.RouteToDatabase, verbose bool) {
 	if verbose {
 		t := asciitable.MakeTable([]string{"Name", "Description", "Protocol", "Type", "URI", "Labels", "Connect", "Expires"})
 		for _, database := range databases {
@@ -1379,7 +1513,7 @@ func showDatabases(cluster string, databases []types.Database, active []tlsca.Ro
 			for _, a := range active {
 				if a.ServiceName == name {
 					name = formatActiveDB(a)
-					connect = formatConnectCommand(cluster, a)
+					connect = formatConnectCommand(clusterFlag, a)
 				}
 			}
 			t.AddRow([]string{
@@ -1395,23 +1529,24 @@ func showDatabases(cluster string, databases []types.Database, active []tlsca.Ro
 		}
 		fmt.Println(t.AsBuffer().String())
 	} else {
-		t := asciitable.MakeTable([]string{"Name", "Description", "Labels", "Connect"})
+		var rows [][]string
 		for _, database := range databases {
 			name := database.GetName()
 			var connect string
 			for _, a := range active {
 				if a.ServiceName == name {
 					name = formatActiveDB(a)
-					connect = formatConnectCommand(cluster, a)
+					connect = formatConnectCommand(clusterFlag, a)
 				}
 			}
-			t.AddRow([]string{
+			rows = append(rows, []string{
 				name,
 				database.GetDescription(),
 				formatDatabaseLabels(database),
 				connect,
 			})
 		}
+		t := makeTableWithTruncatedColumn([]string{"Name", "Description", "Labels", "Connect"}, rows, "Labels")
 		fmt.Println(t.AsBuffer().String())
 	}
 }
@@ -1420,21 +1555,26 @@ func formatDatabaseLabels(database types.Database) string {
 	labels := database.GetAllLabels()
 	// Hide the origin label unless printing verbose table.
 	delete(labels, types.OriginLabel)
-	return types.LabelsAsString(labels, nil)
+	return sortedLabels(labels)
 }
 
 // formatConnectCommand formats an appropriate database connection command
 // for a user based on the provided database parameters.
-func formatConnectCommand(cluster string, active tlsca.RouteToDatabase) string {
-	switch {
-	case active.Username != "" && active.Database != "":
-		return fmt.Sprintf("tsh db connect %v", active.ServiceName)
-	case active.Username != "":
-		return fmt.Sprintf("tsh db connect --db-name=<name> %v", active.ServiceName)
-	case active.Database != "":
-		return fmt.Sprintf("tsh db connect --db-user=<user> %v", active.ServiceName)
+func formatConnectCommand(clusterFlag string, active tlsca.RouteToDatabase) string {
+	cmdTokens := []string{"tsh", "db", "connect"}
+
+	if clusterFlag != "" {
+		cmdTokens = append(cmdTokens, fmt.Sprintf("--cluster=%s", clusterFlag))
 	}
-	return fmt.Sprintf("tsh db connect --db-user=<user> --db-name=<name> %v", active.ServiceName)
+	if active.Username == "" {
+		cmdTokens = append(cmdTokens, "--db-user=<user>")
+	}
+	if active.Database == "" {
+		cmdTokens = append(cmdTokens, "--db-name=<name>")
+	}
+
+	cmdTokens = append(cmdTokens, active.ServiceName)
+	return strings.Join(cmdTokens, " ")
 }
 
 func formatActiveDB(active tlsca.RouteToDatabase) string {
@@ -1447,26 +1587,6 @@ func formatActiveDB(active tlsca.RouteToDatabase) string {
 		return fmt.Sprintf("> %v (db: %v)", active.ServiceName, active.Database)
 	}
 	return fmt.Sprintf("> %v", active.ServiceName)
-}
-
-// chunkLabels breaks labels into sized chunks. Used to improve readability
-// of "tsh ls".
-func chunkLabels(labels map[string]string, chunkSize int) [][]string {
-	// First sort labels so they always occur in the same order.
-	sorted := make([]string, 0, len(labels))
-	for k, v := range labels {
-		sorted = append(sorted, fmt.Sprintf("%v=%v", k, v))
-	}
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-
-	// Then chunk labels into sized chunks.
-	var chunks [][]string
-	for chunkSize < len(sorted) {
-		sorted, chunks = sorted[chunkSize:], append(chunks, sorted[0:chunkSize:chunkSize])
-	}
-	chunks = append(chunks, sorted)
-
-	return chunks
 }
 
 // onListClusters executes 'tsh clusters' command
@@ -1733,10 +1853,20 @@ func makeClient(cf *CLIConf, useProfileLogin bool) (*client.TeleportClient, erro
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		hostAuthFunc, err := key.HostKeyCallback(cf.InsecureSkipVerify)
+
+		rootCluster, err := key.RootClusterName()
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
+		clusters := []string{rootCluster}
+		if cf.SiteName != "" {
+			clusters = append(clusters, cf.SiteName)
+		}
+		hostAuthFunc, err = key.HostKeyCallbackForClusters(cf.InsecureSkipVerify, apiutils.Deduplicate(clusters))
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+
 		if hostAuthFunc != nil {
 			c.HostKeyCallback = hostAuthFunc
 		} else {
@@ -1770,7 +1900,7 @@ func makeClient(cf *CLIConf, useProfileLogin bool) (*client.TeleportClient, erro
 		}
 
 		if len(key.TLSCert) > 0 {
-			c.TLS, err = key.TeleportClientTLSConfig(nil)
+			c.TLS, err = key.TeleportClientTLSConfig(nil, clusters)
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
@@ -1861,6 +1991,10 @@ func makeClient(cf *CLIConf, useProfileLogin bool) (*client.TeleportClient, erro
 		c.ForwardAgent = client.ForwardAgentYes
 	}
 
+	if err := setX11Config(c, cf, options, os.Getenv); err != nil {
+		log.WithError(err).Info("X11 forwarding is not properly configured, continuing without it.")
+	}
+
 	// If the caller does not want to check host keys, pass in a insecure host
 	// key checker.
 	if !options.StrictHostKeyChecking {
@@ -1920,6 +2054,30 @@ func makeClient(cf *CLIConf, useProfileLogin bool) (*client.TeleportClient, erro
 	}
 
 	return tc, nil
+}
+
+// setX11Config sets X11 config using CLI and SSH option flags.
+func setX11Config(c *client.Config, cf *CLIConf, o Options, fn envGetter) error {
+	// X11 forwarding can be enabled with -X, -Y, or -oForwardX11=yes
+	c.EnableX11Forwarding = cf.X11ForwardingUntrusted || cf.X11ForwardingTrusted || o.ForwardX11
+
+	if c.EnableX11Forwarding && fn(x11.DisplayEnv) == "" {
+		c.EnableX11Forwarding = false
+		return trace.BadParameter("$DISPLAY must be set for X11 forwarding")
+	}
+
+	c.X11ForwardingTrusted = cf.X11ForwardingTrusted
+	if o.ForwardX11Trusted != nil && *o.ForwardX11Trusted {
+		c.X11ForwardingTrusted = true
+	}
+
+	// Set X11 forwarding timeout, prioritizing the SSH option if set.
+	c.X11ForwardingTimeout = o.ForwardX11Timeout
+	if c.X11ForwardingTimeout == 0 {
+		c.X11ForwardingTimeout = cf.X11ForwardingTimeout
+	}
+
+	return nil
 }
 
 // defaultWebProxyPorts is the order of default proxy ports to try, in order that
@@ -2054,6 +2212,9 @@ func printStatus(debug bool, p *client.ProfileStatus, isActive bool) {
 
 	fmt.Printf("%vProfile URL:        %v\n", prefix, p.ProxyURL.String())
 	fmt.Printf("  Logged in as:       %v\n", p.Username)
+	if len(p.ActiveRequests.AccessRequests) != 0 {
+		fmt.Printf("  Active requests:    %v\n", strings.Join(p.ActiveRequests.AccessRequests, ", "))
+	}
 	if p.Cluster != "" {
 		fmt.Printf("  Cluster:            %v\n", p.Cluster)
 	}
@@ -2145,26 +2306,24 @@ func host(in string) string {
 	return out
 }
 
-// waitForRequestResolution waits for an access request to be resolved.
-func waitForRequestResolution(cf *CLIConf, tc *client.TeleportClient, req types.AccessRequest) error {
+// waitForRequestResolution waits for an access request to be resolved. On
+// approval, returns the updated request. `clt` must be a client to the root
+// cluster, such as the one returned by
+// `(*TeleportClient).WithRootClusterClient`. `ready` will be closed when the
+// event watcher used to wait for the request updates is ready.
+func waitForRequestResolution(cf *CLIConf, clt auth.ClientI, req types.AccessRequest, ready chan<- struct{}) (types.AccessRequest, error) {
 	filter := types.AccessRequestFilter{
 		User: req.GetUser(),
 	}
-	var err error
-	var watcher types.Watcher
-	err = tc.WithRootClusterClient(cf.Context, func(clt auth.ClientI) error {
-		watcher, err = tc.NewWatcher(cf.Context, types.Watch{
-			Name: "await-request-approval",
-			Kinds: []types.WatchKind{{
-				Kind:   types.KindAccessRequest,
-				Filter: filter.IntoMap(),
-			}},
-		})
-		return trace.Wrap(err)
+	watcher, err := clt.NewWatcher(cf.Context, types.Watch{
+		Name: "await-request-approval",
+		Kinds: []types.WatchKind{{
+			Kind:   types.KindAccessRequest,
+			Filter: filter.IntoMap(),
+		}},
 	})
-
 	if err != nil {
-		return trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
 	defer watcher.Close()
 Loop:
@@ -2174,28 +2333,29 @@ Loop:
 			switch event.Type {
 			case types.OpInit:
 				log.Infof("Access-request watcher initialized...")
+				close(ready)
 				continue Loop
 			case types.OpPut:
 				r, ok := event.Resource.(*types.AccessRequestV3)
 				if !ok {
-					return trace.BadParameter("unexpected resource type %T", event.Resource)
+					return nil, trace.BadParameter("unexpected resource type %T", event.Resource)
 				}
 				if r.GetName() != req.GetName() || r.GetState().IsPending() {
 					log.Debugf("Skipping put event id=%s,state=%s.", r.GetName(), r.GetState())
 					continue Loop
 				}
-				return onRequestResolution(cf, tc, r)
+				return r, nil
 			case types.OpDelete:
 				if event.Resource.GetName() != req.GetName() {
 					log.Debugf("Skipping delete event id=%s", event.Resource.GetName())
 					continue Loop
 				}
-				return trace.Errorf("request %s has expired or been deleted...", event.Resource.GetName())
+				return nil, trace.Errorf("request %s has expired or been deleted...", event.Resource.GetName())
 			default:
 				log.Warnf("Skipping unknown event type %s", event.Type)
 			}
 		case <-watcher.Done():
-			return trace.Wrap(watcher.Error())
+			return nil, trace.Wrap(watcher.Error())
 		}
 	}
 }
@@ -2240,7 +2400,7 @@ func reissueWithRequests(cf *CLIConf, tc *client.TeleportClient, reqIDs ...strin
 	if err := tc.ReissueUserCerts(cf.Context, client.CertCacheDrop, params); err != nil {
 		return trace.Wrap(err)
 	}
-	if err := tc.SaveProfile("", true); err != nil {
+	if err := tc.SaveProfile(cf.HomePath, true); err != nil {
 		return trace.Wrap(err)
 	}
 	if err := updateKubeConfig(cf, tc, ""); err != nil {

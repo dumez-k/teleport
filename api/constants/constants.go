@@ -104,6 +104,10 @@ const (
 	// TODO(r0mant): See if we can use net.ErrClosed and errors.Is() instead.
 	UseOfClosedNetworkConnection = "use of closed network connection"
 
+	// FailedToSendCloseNotify is an error message from Go net package
+	// indicating that the connection was closed by the server.
+	FailedToSendCloseNotify = "tls: failed to send closeNotify alert (but connection was closed anyway)"
+
 	// AWSConsoleURL is the URL of AWS management console.
 	AWSConsoleURL = "https://console.aws.amazon.com"
 	// AWSAccountIDLabel is the key of the label containing AWS account ID.
@@ -167,4 +171,14 @@ const (
 
 	// ALPNSNIAuthProtocol allows dialing local/remote auth service based on SNI cluster name value.
 	ALPNSNIAuthProtocol = "teleport-auth@"
+	// ALPNSNIProtocolReverseTunnel is TLS ALPN protocol value used to indicate Proxy reversetunnel protocol.
+	ALPNSNIProtocolReverseTunnel = "teleport-reversetunnel"
+)
+
+const (
+	// KubeSNIPrefix is a SNI Kubernetes prefix used for distinguishing the Kubernetes HTTP traffic.
+	// DELETE IN 11.0. Deprecated, use only KubeTeleportProxyALPNPrefix.
+	KubeSNIPrefix = "kube."
+	// KubeTeleportProxyALPNPrefix is a SNI Kubernetes prefix used for distinguishing the Kubernetes HTTP traffic.
+	KubeTeleportProxyALPNPrefix = "kube-teleport-proxy-alpn."
 )

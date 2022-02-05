@@ -26,6 +26,7 @@ import (
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/types/wrappers"
+	"github.com/gravitational/teleport/lib/session"
 
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
@@ -178,6 +179,8 @@ type Context struct {
 	// Session is an optional session.end event. These events hold information
 	// about session recordings.
 	Session *events.SessionEnd
+	// SSHSession is an optional (active) SSH session.
+	SSHSession *session.Session
 }
 
 // String returns user friendly representation of this context
@@ -190,8 +193,14 @@ const (
 	UserIdentifier = "user"
 	// ResourceIdentifier represents resource registered identifier in the rules
 	ResourceIdentifier = "resource"
+	// ResourceLabelsIdentifier refers to the static and dynamic labels in a resource.
+	ResourceLabelsIdentifier = "labels"
+	// ResourceNameIdentifier refers to the metadata name field for a resource.
+	ResourceNameIdentifier = "name"
 	// SessionIdentifier refers to a session (recording) in the rules.
 	SessionIdentifier = "session"
+	// SSHSessionIdentifier refers to an (active) SSH session in the rules.
+	SSHSessionIdentifier = "ssh_session"
 	// ImpersonateRoleIdentifier is a role to impersonate
 	ImpersonateRoleIdentifier = "impersonate_role"
 	// ImpersonateUserIdentifier is a user to impersonate
@@ -232,8 +241,54 @@ func (ctx *Context) GetIdentifier(fields []string) (interface{}, error) {
 			session = ctx.Session
 		}
 		return predicate.GetFieldByTag(session, teleport.JSON, fields[1:])
+	case SSHSessionIdentifier:
+		// Do not expose the original session.Session, instead transform it into a
+		// ctxSession so the exposed fields match our desired API.
+		return predicate.GetFieldByTag(toCtxSession(ctx.SSHSession), teleport.JSON, fields[1:])
 	default:
 		return nil, trace.NotFound("%v is not defined", strings.Join(fields, "."))
+	}
+}
+
+// ctxSession represents the public contract of a session.Session, as exposed
+// to a Context rule.
+// See RFD 45:
+// https://github.com/gravitational/teleport/blob/master/rfd/0045-ssh_session-where-condition.md#replacing-parties-by-usernames.
+type ctxSession struct {
+	// Namespace is a session namespace, separating sessions from each other.
+	Namespace string `json:"namespace"`
+	// Login is a login used by all parties joining the session.
+	Login string `json:"login"`
+	// Created records the information about the time when session was created.
+	Created time.Time `json:"created"`
+	// LastActive holds the information about when the session was last active.
+	LastActive time.Time `json:"last_active"`
+	// ServerID of session.
+	ServerID string `json:"server_id"`
+	// ServerHostname of session.
+	ServerHostname string `json:"server_hostname"`
+	// ServerAddr of session.
+	ServerAddr string `json:"server_addr"`
+	// ClusterName is the name of cluster that this session belongs to.
+	ClusterName string `json:"cluster_name"`
+	// Participants is a list of session participants expressed as usernames.
+	Participants []string `json:"participants"`
+}
+
+func toCtxSession(s *session.Session) ctxSession {
+	if s == nil {
+		return ctxSession{}
+	}
+	return ctxSession{
+		Namespace:      s.Namespace,
+		Login:          s.Login,
+		Created:        s.Created,
+		LastActive:     s.LastActive,
+		ServerID:       s.ServerID,
+		ServerHostname: s.ServerHostname,
+		ServerAddr:     s.ServerAddr,
+		ClusterName:    s.ClusterName,
+		Participants:   s.Participants(),
 	}
 }
 
@@ -467,3 +522,113 @@ func newParserForIdentifierSubcondition(ctx RuleContext, identifier string) (pre
 		},
 	})
 }
+
+// NewResourceParser returns a parser made for boolean expressions based on a
+// json-serialiable resource. Customized to allow short identifiers common in all
+// resources:
+//  - `metadata.name` can be referenced with `name` ie: `name == "jenkins"``
+//  - `metadata.labels + spec.dynamic_labels` can be referenced with `labels`
+//     ie: `labels.env == "prod"`
+// All other fields can be referenced by starting expression with identifier `resource`
+// followed by the names of the json fields ie: `resource.spec.public_addr`.
+func NewResourceParser(resource types.ResourceWithLabels) (BoolPredicateParser, error) {
+	predEquals := func(a interface{}, b interface{}) predicate.BoolPredicate {
+		switch aval := a.(type) {
+		case label:
+			bval, ok := b.(string)
+			return func() bool {
+				return ok && aval.value == bval
+			}
+		default:
+			return predicate.Equals(a, b)
+		}
+	}
+
+	p, err := predicate.NewParser(predicate.Def{
+		Operators: predicate.Operators{
+			AND: predicate.And,
+			OR:  predicate.Or,
+			NOT: predicate.Not,
+			EQ:  predEquals,
+			NEQ: func(a interface{}, b interface{}) predicate.BoolPredicate {
+				return predicate.Not(predEquals(a, b))
+			},
+		},
+		Functions: map[string]interface{}{
+			"equals": predEquals,
+			// search allows fuzzy matching against select field values.
+			"search": func(searchVals ...string) predicate.BoolPredicate {
+				return func() bool {
+					return resource.MatchSearch(searchVals)
+				}
+			},
+			// exists checks for an existence of a label by checking
+			// if a key exists. Label value are unchecked.
+			"exists": func(l label) predicate.BoolPredicate {
+				return func() bool {
+					return len(l.key) > 0
+				}
+			},
+		},
+		GetIdentifier: func(fields []string) (interface{}, error) {
+			switch fields[0] {
+			case ResourceLabelsIdentifier:
+				combinedLabels := resource.GetAllLabels()
+				switch {
+				// Field length of 1 means the user is using
+				// an index expression ie: labels["env"], which the
+				// parser will expect a map for lookup in `GetProperty`.
+				case len(fields) == 1:
+					return labels(combinedLabels), nil
+				case len(fields) > 2:
+					return nil, trace.BadParameter("only two fields are supported with identifier %q, got %d: %v", ResourceLabelsIdentifier, len(fields), fields)
+				default:
+					key := fields[1]
+					val, ok := combinedLabels[key]
+					if ok {
+						return label{key: key, value: val}, nil
+					}
+					return label{}, nil
+				}
+
+			case ResourceNameIdentifier:
+				if len(fields) > 1 {
+					return nil, trace.BadParameter("only one field are supported with identifier %q, got %d: %v", ResourceNameIdentifier, len(fields), fields)
+				}
+				return resource.GetName(), nil
+			case ResourceIdentifier:
+				return predicate.GetFieldByTag(resource, teleport.JSON, fields[1:])
+			default:
+				return nil, trace.NotFound("%v is not defined", strings.Join(fields, "."))
+			}
+		},
+		GetProperty: func(mapVal, keyVal interface{}) (interface{}, error) {
+			m, ok := mapVal.(labels)
+			if !ok {
+				return GetStringMapValue(mapVal, keyVal)
+			}
+
+			key, ok := keyVal.(string)
+			if !ok {
+				return nil, trace.BadParameter("only string keys are supported")
+			}
+
+			val, ok := m[key]
+			if ok {
+				return label{key: key, value: val}, nil
+			}
+			return label{}, nil
+		},
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return boolPredicateParser{Parser: p}, nil
+}
+
+type label struct {
+	key, value string
+}
+
+type labels map[string]string
