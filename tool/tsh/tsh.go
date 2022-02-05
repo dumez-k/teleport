@@ -134,6 +134,8 @@ type CLIConf struct {
 	SiteName string
 	// KubernetesCluster specifies the kubernetes cluster to login to.
 	KubernetesCluster string
+	// DaemonAddr is the daemon listening address.
+	DaemonAddr string
 	// DatabaseService specifies the database proxy server to log into.
 	DatabaseService string
 	// DatabaseUser specifies database user to embed in the certificate.
@@ -384,6 +386,11 @@ func Run(args []string, opts ...cliOption) error {
 	ssh.Flag("cluster", clusterHelp).StringVar(&cf.SiteName)
 	ssh.Flag("option", "OpenSSH options in the format used in the configuration file").Short('o').AllowDuplicate().StringsVar(&cf.Options)
 	ssh.Flag("no-remote-exec", "Don't execute remote command, useful for port forwarding").Short('N').BoolVar(&cf.NoRemoteExec)
+
+	// teleterm daemon
+	daemon := app.Command("daemon", "Daemon is the tsh daemon service")
+	daemonStart := daemon.Command("start", "Starts tsh daemon service")
+	daemonStart.Flag("addr", "Addr is the daemon listening address.").StringVar(&cf.DaemonAddr)
 
 	// AWS.
 	aws := app.Command("aws", "Access AWS API.")
@@ -693,6 +700,8 @@ func Run(args []string, opts ...cliOption) error {
 		err = onConfigProxy(&cf)
 	case aws.FullCommand():
 		err = onAWS(&cf)
+	case daemonStart.FullCommand():
+		err = onDaemonStart(&cf)
 	default:
 		// This should only happen when there's a missing switch case above.
 		err = trace.BadParameter("command %q not configured", command)

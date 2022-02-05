@@ -16,7 +16,12 @@ limitations under the License.
 
 package common
 
-import "golang.org/x/crypto/acme"
+import (
+	"golang.org/x/crypto/acme"
+
+	"github.com/gravitational/teleport/lib/defaults"
+	"github.com/gravitational/trace"
+)
 
 // Protocol is the TLS ALPN protocol type.
 type Protocol string
@@ -70,4 +75,18 @@ func ProtocolsToString(protocols []Protocol) []string {
 		out = append(out, string(v))
 	}
 	return out
+}
+
+// ToALPNProtocol parses string to ALPN protocol type
+func ToALPNProtocol(dbProtocol string) (Protocol, error) {
+	switch dbProtocol {
+	case defaults.ProtocolMySQL:
+		return ProtocolMySQL, nil
+	case defaults.ProtocolPostgres, defaults.ProtocolCockroachDB:
+		return ProtocolPostgres, nil
+	case defaults.ProtocolMongoDB:
+		return ProtocolMongoDB, nil
+	default:
+		return "", trace.NotImplemented("%q protocol is not supported", dbProtocol)
+	}
 }

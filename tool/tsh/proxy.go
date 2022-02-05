@@ -31,7 +31,6 @@ import (
 	"github.com/gravitational/teleport/api/profile"
 	"github.com/gravitational/teleport/api/utils/keypaths"
 	libclient "github.com/gravitational/teleport/lib/client"
-	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/srv/alpnproxy"
 	alpncommon "github.com/gravitational/teleport/lib/srv/alpnproxy/common"
 	"github.com/gravitational/teleport/lib/utils"
@@ -198,7 +197,7 @@ func onProxyCommandDB(cf *CLIConf) error {
 }
 
 func mkLocalProxy(cf *CLIConf, remoteProxyAddr string, protocol string, listener net.Listener) (*alpnproxy.LocalProxy, error) {
-	alpnProtocol, err := toALPNProtocol(protocol)
+	alpnProtocol, err := alpncommon.ToALPNProtocol(protocol)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -218,19 +217,6 @@ func mkLocalProxy(cf *CLIConf, remoteProxyAddr string, protocol string, listener
 		return nil, trace.Wrap(err)
 	}
 	return lp, nil
-}
-
-func toALPNProtocol(dbProtocol string) (alpncommon.Protocol, error) {
-	switch dbProtocol {
-	case defaults.ProtocolMySQL:
-		return alpncommon.ProtocolMySQL, nil
-	case defaults.ProtocolPostgres, defaults.ProtocolCockroachDB:
-		return alpncommon.ProtocolPostgres, nil
-	case defaults.ProtocolMongoDB:
-		return alpncommon.ProtocolMongoDB, nil
-	default:
-		return "", trace.NotImplemented("%q protocol is not supported", dbProtocol)
-	}
 }
 
 // dbProxyTpl is the message that gets printed to a user when a database proxy is started.

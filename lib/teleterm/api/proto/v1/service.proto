@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package teleport.terminal.v1;
+
+option go_package = "github.com/gravitational/teleport/lib/teleterm/v1";
+
+import "google/protobuf/empty.proto";
+import "v1/cluster.proto";
+import "v1/database.proto";
+import "v1/gateway.proto";
+import "v1/kube.proto";
+import "v1/app.proto";
+import "v1/server.proto";
+import "v1/auth_settings.proto";
+
+service TerminalService {
+    // ListRootClusters
+    rpc ListRootClusters(ListClustersRequest) returns (ListClustersResponse);
+    // ListLeafClusters
+    rpc ListLeafClusters(ListLeafClustersRequest) returns (ListClustersResponse);
+    // ListDatabases
+    rpc ListDatabases(ListDatabasesRequest) returns (ListDatabasesResponse);
+    // ListGateways
+    rpc ListGateways(ListGatewaysRequest) returns (ListGatewaysResponse);
+    // ListServers
+    rpc ListServers(ListServersRequest) returns (ListServersResponse);
+    // ListKubes
+    rpc ListKubes(ListKubesRequest) returns (ListKubesResponse);
+    // ListApps
+    rpc ListApps(ListAppsRequest) returns (ListAppsResponse);
+    // CreateGateway
+    rpc CreateGateway(CreateGatewayRequest) returns (Gateway);
+    // AddCluster
+    rpc AddCluster(AddClusterRequest) returns (Cluster);
+    // RemoveCluster
+    rpc RemoveCluster(RemoveClusterRequest) returns (EmptyResponse);
+    // RemoveGateway
+    rpc RemoveGateway(RemoveGatewayRequest) returns (EmptyResponse);
+    // GetAuthSettings
+    rpc GetAuthSettings(GetAuthSettingsRequest) returns (AuthSettings);
+    // GetCluster
+    rpc GetCluster(GetClusterRequest) returns (Cluster);
+    // Login
+    rpc Login(LoginRequest) returns (EmptyResponse);
+    // ClusterLogin
+    rpc Logout(LogoutRequest) returns (EmptyResponse);
+}
+
+message RemoveClusterRequest { string cluster_uri = 1; }
+
+message GetClusterRequest { string cluster_uri = 1; }
+
+message LogoutRequest { string cluster_uri = 1; }
+
+// LoginRequest describes cluster login request
+message LoginRequest {
+    string cluster_uri = 1;
+    LocalParams local = 2;
+    SsoParams sso = 3;
+
+    message LocalParams {
+        string user = 1;
+        string password = 2;
+        string token = 3;
+    }
+
+    message SsoParams {
+        string provider_type = 1;
+        string provider_name = 2;
+    }
+}
+
+message AddClusterRequest { string name = 1; }
+
+message ListKubesRequest { string cluster_uri = 1; }
+
+message ListAppsRequest { string cluster_uri = 1; }
+
+message ListClustersRequest {}
+
+message ListClustersResponse { repeated Cluster clusters = 1; }
+
+message ListDatabasesRequest { string cluster_uri = 1; }
+
+message ListLeafClustersRequest { string cluster_uri = 1; }
+
+
+message ListDatabasesResponse { repeated Database databases = 1; }
+
+message CreateGatewayRequest {
+    string target_uri = 1;
+    string target_user = 2;
+    string local_port = 3;
+}
+
+message ListGatewaysRequest { repeated string cluster_ids = 1; }
+
+message ListGatewaysResponse { repeated Gateway gateways = 1; }
+
+message RemoveGatewayRequest { string gateway_uri = 1; }
+
+message ListServersRequest { string cluster_uri = 1; }
+
+message ListServersResponse { repeated Server servers = 1; }
+
+message ListKubesResponse { repeated Kube kubes = 1; }
+
+message ListAppsResponse { repeated App apps = 1; }
+
+message GetAuthSettingsRequest { string cluster_uri = 1; }
+
+message EmptyResponse {}

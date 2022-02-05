@@ -670,6 +670,9 @@ func readProfile(profileDir string, profileName string) (*ProfileStatus, error) 
 	}, nil
 }
 
+// TODO (alexeyk): make proper renames everywhere
+var StatusFromFile = readProfile
+
 // StatusCurrent returns the active profile status.
 func StatusCurrent(profileDir, proxyHost string) (*ProfileStatus, error) {
 	active, _, err := Status(profileDir, proxyHost)
@@ -2440,6 +2443,16 @@ func (tc *TeleportClient) Login(ctx context.Context) (*Key, error) {
 	}
 
 	return key, nil
+}
+
+// GetWebConfig retreives Teleport proxy web config
+func (tc *TeleportClient) GetWebConfig(ctx context.Context) (*WebConfig, error) {
+	cfg, err := GetWebConfig(ctx, tc.WebProxyAddr, tc.InsecureSkipVerify)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return cfg, nil
 }
 
 // ActivateKey saves the target session cert into the local

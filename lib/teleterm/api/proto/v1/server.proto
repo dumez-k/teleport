@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package teleport.terminal.v1;
+
+option go_package = "github.com/gravitational/teleport/lib/teleterm/v1";
+
+import "v1/label.proto";
+
+// Server describes connected Server
+message Server {
+    // uri is the cluster resource URI
+    string uri = 1;
+    // tunnel indicates of this server is connected over a reverse tunnel.
+    bool tunnel = 2;
+    // name is this server name
+    string name = 3;
+    // cluster_id is this server cluster name
+    string cluster_id = 4;
+    // hostname is this server hostname
+    string hostname = 5;
+    // addr is this server ip address
+    string addr = 6;
+    // labels is this server list of labels
+    repeated Label labels = 7;
+}

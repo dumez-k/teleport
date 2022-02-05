@@ -622,7 +622,8 @@ func localSettings(cap types.AuthPreference) (webclient.AuthenticationSettings, 
 func oidcSettings(connector types.OIDCConnector, cap types.AuthPreference) webclient.AuthenticationSettings {
 	return webclient.AuthenticationSettings{
 		Type: constants.OIDC,
-		OIDC: &webclient.OIDCSettings{
+		OIDC: &webclient.AuthProvider{
+			Type:    constants.OIDC,
 			Name:    connector.GetName(),
 			Display: connector.GetDisplay(),
 		},
@@ -634,7 +635,8 @@ func oidcSettings(connector types.OIDCConnector, cap types.AuthPreference) webcl
 func samlSettings(connector types.SAMLConnector, cap types.AuthPreference) webclient.AuthenticationSettings {
 	return webclient.AuthenticationSettings{
 		Type: constants.SAML,
-		SAML: &webclient.SAMLSettings{
+		SAML: &webclient.AuthProvider{
+			Type:    constants.SAML,
 			Name:    connector.GetName(),
 			Display: connector.GetDisplay(),
 		},
@@ -646,7 +648,8 @@ func samlSettings(connector types.SAMLConnector, cap types.AuthPreference) webcl
 func githubSettings(connector types.GithubConnector, cap types.AuthPreference) webclient.AuthenticationSettings {
 	return webclient.AuthenticationSettings{
 		Type: constants.Github,
-		Github: &webclient.GithubSettings{
+		Github: &webclient.AuthProvider{
+			Type:    constants.Github,
 			Name:    connector.GetName(),
 			Display: connector.GetDisplay(),
 		},
@@ -734,8 +737,7 @@ func defaultAuthenticationSettings(ctx context.Context, authClient auth.ClientI)
 
 func (h *Handler) ping(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
 	var err error
-
-	defaultSettings, err := defaultAuthenticationSettings(r.Context(), h.cfg.ProxyClient)
+	as, err := defaultAuthenticationSettings(r.Context(), h.cfg.ProxyClient)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -745,8 +747,47 @@ func (h *Handler) ping(w http.ResponseWriter, r *http.Request, p httprouter.Para
 		return nil, trace.Wrap(err)
 	}
 
+	// get all OIDC connectors
+	oidcConnectors, err := h.cfg.ProxyClient.GetOIDCConnectors(r.Context(), false)
+	if err != nil {
+		h.log.WithError(err).Error("Cannot retrieve OIDC connectors.")
+	}
+	for _, item := range oidcConnectors {
+		as.AuthProviders = append(as.AuthProviders, webclient.AuthProvider{
+			Name:    item.GetName(),
+			Display: item.GetDisplay(),
+			Type:    constants.OIDC,
+		})
+	}
+
+	// get all SAML connectors
+	samlConnectors, err := h.cfg.ProxyClient.GetSAMLConnectors(r.Context(), false)
+	if err != nil {
+		h.log.WithError(err).Error("Cannot retrieve SAML connectors.")
+	}
+	for _, item := range samlConnectors {
+		as.AuthProviders = append(as.AuthProviders, webclient.AuthProvider{
+			Type:    constants.SAML,
+			Name:    item.GetName(),
+			Display: item.GetDisplay(),
+		})
+	}
+
+	// get all Github connectors
+	githubConnectors, err := h.cfg.ProxyClient.GetGithubConnectors(r.Context(), false)
+	if err != nil {
+		h.log.WithError(err).Error("Cannot retrieve Github connectors.")
+	}
+	for _, item := range githubConnectors {
+		as.AuthProviders = append(as.AuthProviders, webclient.AuthProvider{
+			Type:    constants.Github,
+			Name:    item.GetName(),
+			Display: item.GetDisplay(),
+		})
+	}
+
 	return webclient.PingResponse{
-		Auth:             defaultSettings,
+		Auth:             as,
 		Proxy:            *proxyConfig,
 		ServerVersion:    teleport.Version,
 		MinClientVersion: teleport.MinClientVersion,
