@@ -1152,6 +1152,8 @@ type ClientConfig struct {
 	Labels map[string]string
 	// Interactive launches with the terminal attached if true
 	Interactive bool
+	// Regenerate will regenerate certificates user certificates.
+	Regenerate bool
 }
 
 // NewClientWithCreds creates client with credentials
@@ -1239,6 +1241,19 @@ func (i *TeleInstance) NewClient(t *testing.T, cfg ClientConfig) (*client.Telepo
 	user, ok := i.Secrets.Users[cfg.Login]
 	if !ok {
 		return nil, trace.BadParameter("unknown login %q", cfg.Login)
+	}
+	// Regenerate certificates if requested.
+	if cfg.Regenerate {
+		auth := i.Process.GetAuthServer()
+		user.Key.Cert, user.Key.TLSCert, err = auth.GenerateUserTestCerts(
+			user.Key.Pub,
+			user.Username,
+			24*time.Hour,
+			constants.CertificateFormatStandard,
+			"")
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
 	}
 	if user.Key == nil {
 		return nil, trace.BadParameter("user %q has no key", cfg.Login)

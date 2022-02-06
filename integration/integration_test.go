@@ -1192,10 +1192,6 @@ func runDisconnectTest(t *testing.T, suite *integrationTestSuite, tc disconnectT
 	require.NoError(t, teleport.Start())
 	defer teleport.StopAll()
 
-	// get a reference to site obj:
-	site := teleport.GetSiteAPI(Site)
-	require.NotNil(t, site)
-
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -1211,7 +1207,13 @@ func runDisconnectTest(t *testing.T, suite *integrationTestSuite, tc disconnectT
 
 		openSession := func() {
 			defer cancel()
-			cl, err := teleport.NewClient(t, ClientConfig{Login: username, Cluster: Site, Host: Host, Port: teleport.GetPortSSHInt()})
+			cl, err := teleport.NewClient(t, ClientConfig{
+				Login:      username,
+				Cluster:    Site,
+				Host:       Host,
+				Port:       teleport.GetPortSSHInt(),
+				Regenerate: true,
+			})
 			require.NoError(t, err)
 			cl.Stdout = person
 			cl.Stdin = person
