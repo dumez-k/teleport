@@ -119,7 +119,7 @@ func ReadLogin7Packet(r io.Reader) (*Login7Packet, error) {
 	}
 
 	var header Login7Header
-	if err := binary.Read(bytes.NewBuffer(pkt.Data), binary.LittleEndian, &header); err != nil {
+	if err := binary.Read(bytes.NewReader(pkt.Data), binary.LittleEndian, &header); err != nil {
 		return nil, trace.Wrap(err)
 	}
 

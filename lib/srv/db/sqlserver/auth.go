@@ -49,6 +49,7 @@ func (c *connector) getAuth(sessionCtx *common.Session) (*krbAuth, error) {
 		sessionCtx.Database.GetAD().Realm,
 		keytab,
 		config,
+		// Active Directory does not commonly support FAST negotiation.
 		client.DisablePAFXFAST(true))
 
 	// Login.

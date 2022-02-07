@@ -501,13 +501,11 @@ func TestAccessSQLServer(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			// Disconnect.
-			err = conn.Close()
-			require.NoError(t, err)
-
-			// Shut down local proxy too.
-			err = proxy.Close()
-			require.NoError(t, err)
+			// Close connection and proxy.
+			t.Cleanup(func() {
+				require.NoError(t, conn.Close())
+				require.NoError(t, proxy.Close())
+			})
 		})
 	}
 }
@@ -975,7 +973,7 @@ func (c *testContext) sqlServerClient(ctx context.Context, teleportUser, dbServi
 	}
 
 	// SQL Server clients always connect via the local proxy so start it first.
-	proxy, err := c.startLocalProxy(ctx, c.webListener.Addr().String(), teleportUser, route)
+	proxy, err := c.startLocalALPNProxy(ctx, c.webListener.Addr().String(), teleportUser, route)
 	if err != nil {
 		return nil, nil, trace.Wrap(err)
 	}
@@ -996,8 +994,8 @@ func (c *testContext) sqlServerClient(ctx context.Context, teleportUser, dbServi
 	return client, proxy, nil
 }
 
-// startLocalProxy starts local ALPN proxy for the specified database.
-func (c *testContext) startLocalProxy(ctx context.Context, proxyAddr, teleportUser string, route tlsca.RouteToDatabase) (*alpnproxy.LocalProxy, error) {
+// startLocalALPNProxy starts local ALPN proxy for the specified database.
+func (c *testContext) startLocalALPNProxy(ctx context.Context, proxyAddr, teleportUser string, route tlsca.RouteToDatabase) (*alpnproxy.LocalProxy, error) {
 	key, err := client.NewKey()
 	if err != nil {
 		return nil, trace.Wrap(err)

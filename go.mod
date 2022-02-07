@@ -104,9 +104,6 @@ require (
 	k8s.io/api v0.0.0-20200821051526-051d027c14e1
 	k8s.io/apimachinery v0.20.4
 	k8s.io/client-go v0.0.0-20200827131824-5d33118d4742
-)
-
-require (
 	github.com/denisenkom/go-mssqldb v0.11.0
 	github.com/jcmturner/gokrb5/v8 v8.4.2
 )

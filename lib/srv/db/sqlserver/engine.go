@@ -62,9 +62,10 @@ func (e *Engine) InitializeConnection(clientConn net.Conn, _ *common.Session) er
 
 // SendError sends an error to SQL Server client.
 func (e *Engine) SendError(err error) {
-	errSend := protocol.WriteErrorResponse(e.clientConn, err)
-	if errSend != nil && !utils.IsOKNetworkError(errSend) {
-		e.Log.WithError(err).Error("Failed to send error to client.")
+	if err != nil && !utils.IsOKNetworkError(err) {
+		if errSend := protocol.WriteErrorResponse(e.clientConn, err); errSend != nil {
+			e.Log.WithError(errSend).Warnf("Failed to send error to client: %v.", err)
+		}
 	}
 }
 
@@ -107,6 +108,10 @@ func (e *Engine) HandleConnection(ctx context.Context, sessionCtx *common.Sessio
 	return nil
 }
 
+// handleLogin7 processes Login7 packet received from the client.
+//
+// Login7 packet contains database user, database name and various login
+// options that we pass to the target SQL Server.
 func (e *Engine) handleLogin7(sessionCtx *common.Session) (*protocol.Login7Packet, error) {
 	pkt, err := protocol.ReadLogin7Packet(e.clientConn)
 	if err != nil {

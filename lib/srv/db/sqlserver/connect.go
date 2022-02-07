@@ -90,13 +90,5 @@ func (c *connector) Connect(ctx context.Context, sessionCtx *common.Session, log
 
 	// Return all login flags returned by the server so that they can be passed
 	// back to the client.
-	return &closerConn{
-		ReadWriter: mssqlConn.GetUnderlyingConn(),
-		Closer:     conn,
-	}, mssqlConn.GetLoginFlags(), nil
-}
-
-type closerConn struct {
-	io.ReadWriter
-	io.Closer
+	return mssqlConn.GetUnderlyingConn(), mssqlConn.GetLoginFlags(), nil
 }

@@ -242,8 +242,11 @@ func mkLocalProxy(ctx context.Context, opts localProxyOpts) (*alpnproxy.LocalPro
 }
 
 func mkLocalProxyCerts(certFile, keyFile string) ([]tls.Certificate, error) {
-	if certFile == "" || keyFile == "" {
+	if certFile == "" && keyFile == "" {
 		return []tls.Certificate{}, nil
+	}
+	if certFile == "" && keyFile != "" || certFile != "" && keyFile == "" {
+		return nil, trace.BadParameter("both --cert-file and --key-file are required")
 	}
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {

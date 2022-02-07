@@ -278,7 +278,7 @@ func (d *DatabaseV3) GetAzure() Azure {
 	return d.Spec.Azure
 }
 
-// GetAD return Active Directory database configuration.
+// GetAD returns Active Directory database configuration.
 func (d *DatabaseV3) GetAD() AD {
 	return d.Spec.AD
 }
