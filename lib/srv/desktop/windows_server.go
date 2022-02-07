@@ -395,7 +395,7 @@ func (s *WindowsService) newStreamWriter(record bool, sessionID string) (libeven
 		ClusterName:  s.clusterName,
 		SessionID:    session.ID(sessionID),
 		Streamer:     s.streamer,
-		ServerID:     s.cfg.Heartbeat.HostUUID, // TODO(zmb3): is this the service ID or desktop ID?
+		ServerID:     s.cfg.Heartbeat.HostUUID,
 		RecordOutput: record,
 	})
 }
@@ -626,7 +626,7 @@ func (s *WindowsService) handleConnection(proxyConn *tls.Conn) {
 	tdpConn := tdp.NewConn(proxyConn)
 
 	// Inline function to enforce that we are centralizing TDP Error sending in this function.
-	sendTdpError := func(message string) {
+	sendTDPError := func(message string) {
 		if err := tdpConn.OutputMessage(tdp.Error{Message: message}); err != nil {
 			s.cfg.Log.Errorf("Failed to send TDP error message %v: %v", tdp.Error{Message: message}, err)
 		}
@@ -635,8 +635,9 @@ func (s *WindowsService) handleConnection(proxyConn *tls.Conn) {
 	// don't handle connections until the LDAP initialization retry loop has succeeded
 	// (it would fail anyway, but this presents a better error to the user)
 	if atomic.LoadInt32(&s.ldapInitialized) != 1 {
-		// TODO(zmb3): send TDP error message
-		log.Error("This service cannot accept connections until LDAP initialization has completed.")
+		const msg = "This service cannot accept connections until LDAP initialization has completed."
+		sendTDPError(msg)
+		log.Error(msg)
 		return
 	}
 
@@ -644,13 +645,13 @@ func (s *WindowsService) handleConnection(proxyConn *tls.Conn) {
 	remoteAddr, _, err := net.SplitHostPort(proxyConn.RemoteAddr().String())
 	if err != nil {
 		log.WithError(err).Errorf("Could not parse client IP from %q", proxyConn.RemoteAddr().String())
-		sendTdpError("Internal error.")
+		sendTDPError("Internal error.")
 		return
 	}
 	log = log.WithField("client-ip", remoteAddr)
 	if err := s.cfg.ConnLimiter.AcquireConnection(remoteAddr); err != nil {
 		log.WithError(err).Warning("Connection limit exceeded, rejecting connection")
-		sendTdpError("Connection limit exceeded.")
+		sendTDPError("Connection limit exceeded.")
 		return
 	}
 	defer s.cfg.ConnLimiter.ReleaseConnection(remoteAddr)
@@ -659,7 +660,7 @@ func (s *WindowsService) handleConnection(proxyConn *tls.Conn) {
 	ctx, err := s.middleware.WrapContextWithUser(s.closeCtx, proxyConn)
 	if err != nil {
 		log.WithError(err).Warning("mTLS authentication failed for incoming connection")
-		sendTdpError("Connection authentication failed.")
+		sendTDPError("Connection authentication failed.")
 		return
 	}
 	log.Debug("Authenticated Windows desktop connection")
@@ -667,7 +668,7 @@ func (s *WindowsService) handleConnection(proxyConn *tls.Conn) {
 	authContext, err := s.cfg.Authorizer.Authorize(ctx)
 	if err != nil {
 		log.WithError(err).Warning("authorization failed for Windows desktop connection")
-		sendTdpError("Connection authorization failed.")
+		sendTDPError("Connection authorization failed.")
 		return
 	}
 
@@ -678,7 +679,7 @@ func (s *WindowsService) handleConnection(proxyConn *tls.Conn) {
 	desktop, err := s.cfg.AccessPoint.GetWindowsDesktop(ctx, desktopName)
 	if err != nil {
 		log.WithError(err).Warning("Failed to fetch desktop by name")
-		sendTdpError("Teleport failed to find the requested desktop in its database.")
+		sendTDPError("Teleport failed to find the requested desktop in its database.")
 		return
 	}
 
@@ -688,7 +689,7 @@ func (s *WindowsService) handleConnection(proxyConn *tls.Conn) {
 
 	if err := s.connectRDP(ctx, log, proxyConn, desktop, authContext); err != nil {
 		log.Errorf("RDP connection failed: %v", err)
-		sendTdpError("RDP connection failed.")
+		sendTDPError("RDP connection failed.")
 		return
 	}
 }
@@ -763,7 +764,7 @@ func (s *WindowsService) connectRDP(ctx context.Context, log logrus.FieldLogger,
 					Time: s.cfg.Clock.Now().UTC().Round(time.Millisecond),
 				},
 				Message:           b,
-				DelayMilliseconds: delay(), // TODO(zmb3): AuditWriter should set this for us if necessary
+				DelayMilliseconds: delay(),
 			}); err != nil {
 				s.cfg.Log.WithError(err).Warning("could not emit desktop recording event")
 			}
@@ -783,7 +784,7 @@ func (s *WindowsService) connectRDP(ctx context.Context, log logrus.FieldLogger,
 					Time: s.cfg.Clock.Now().UTC().Round(time.Millisecond),
 				},
 				Message:           b,
-				DelayMilliseconds: delay(), // TODO(zmb3): AuditWriter should set this for us if necessary
+				DelayMilliseconds: delay(),
 			}); err != nil {
 				s.cfg.Log.WithError(err).Warning("could not emit desktop recording event")
 			}
