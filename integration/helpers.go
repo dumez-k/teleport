@@ -95,6 +95,8 @@ func SetTestTimeouts(t time.Duration) {
 // TeleInstance represents an in-memory instance of a teleport
 // process for testing
 type TeleInstance struct {
+	mu sync.Mutex
+
 	// Secrets holds the keys (pub, priv and derived cert) of i instance
 	Secrets InstanceSecrets
 
@@ -1244,6 +1246,8 @@ func (i *TeleInstance) NewClient(t *testing.T, cfg ClientConfig) (*client.Telepo
 	}
 	// Regenerate certificates if requested.
 	if cfg.Regenerate {
+		i.mu.Lock()
+
 		auth := i.Process.GetAuthServer()
 		user.Key.Cert, user.Key.TLSCert, err = auth.GenerateUserTestCerts(
 			user.Key.Pub,
@@ -1251,6 +1255,8 @@ func (i *TeleInstance) NewClient(t *testing.T, cfg ClientConfig) (*client.Telepo
 			24*time.Hour,
 			constants.CertificateFormatStandard,
 			"")
+		i.mu.Unlock()
+
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
