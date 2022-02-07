@@ -165,6 +165,21 @@ func NewRole(name string, spec RoleSpecV5) (Role, error) {
 	return &role, nil
 }
 
+// NewRoleV5 constructs new standard role
+func NewRoleV5(name string, spec RoleSpecV5) (Role, error) {
+	role := RoleV5{
+		Version: V5,
+		Metadata: Metadata{
+			Name: name,
+		},
+		Spec: spec,
+	}
+	if err := role.CheckAndSetDefaults(); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &role, nil
+}
+
 // RoleConditionType specifies if it's an allow rule (true) or deny rule (false).
 type RoleConditionType bool
 
