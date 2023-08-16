@@ -21,7 +21,7 @@ jobs:
       
       - name: Configure Submodules
         run: |
-          sed -i 's/branch = .*/branch = "${GITHUB_REF_NAME}/"' '.gitmodules'
+          sed -i 's@branch = .*@branch = "${GITHUB_REF_NAME}@"' '.gitmodules'
           cat .gitmodules
           popd
 
