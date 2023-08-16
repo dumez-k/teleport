@@ -24,10 +24,13 @@ jobs:
       - name: Configure Submodules
         run: |
 
-          # sed -i "s|branch = master|branch = ${{ steps.extract_branch.outputs.branch }}|" '.gitmodules'
+          sed -i "s|branch = master|branch = ${{ steps.extract_branch.outputs.branch }}|" '.gitmodules'
+          # TODO: DELETE THIS
+          sed -i "s|url = https://github.com/gravitational/teleport|url = https://github.com/dumez-k/teleport|" '.gitmodules'
           # TODO: DELETE THIS
           cat .gitmodules
-          # git pull --recurse-submodules
+          git submodule update --init --recursive
+          git submodule update --recursive --remote
       - name: Install Vercel CLI
         run: yarn global add vercel@latest
       - name: Pull Vercel Environment Information
