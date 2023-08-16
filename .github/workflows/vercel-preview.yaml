@@ -23,7 +23,10 @@ jobs:
           repository: 'gravitational/docs'
       - name: Configure Submodules
         run: |
-          sed -i "s|branch = .*|branch = ${{ steps.extract_branch.outputs.branch }}|" '.gitmodules'
+
+          sed -i "s|branch = master|branch = ${{ steps.extract_branch.outputs.branch }}|" '.gitmodules'
+          ##TODO: DELETE THIS
+          sed -i "s|url = https://github.com/gravitational/teleport|url = https://github.com/dumez-k/teleport|" '.gitmodules'
           cat .gitmodules
           git pull --recurse-submodules
       - name: Install Vercel CLI
